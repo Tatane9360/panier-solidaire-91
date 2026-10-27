@@ -24,7 +24,7 @@ Transitions autorisées (liste exhaustive) :
 ## Comptes (`accounts`)
 
 - **S'inscrire** : formulaire limité à nom de la structure, type (commerce ou association), adresse, e-mail, mot de passe. **Aucun autre champ** (un test vérifie la liste exacte). Crée un compte `PENDING` sans accès métier, rattaché automatiquement au territoire pilote. E-mail déjà utilisé → refus avec message clair. Les `COORDINATOR` ne s'inscrivent pas : ils sont créés par le script d'installation. L'e-mail est comparé **sans tenir compte de la casse** (enregistré en minuscules), à l'inscription comme à la connexion. Une personne déjà connectée qui ouvre l'inscription voit un message l'invitant à se déconnecter d'abord (cas d'un commerce qui inscrit un autre site), sans formulaire ; un envoi du formulaire connecté → 403.
-- **Se connecter** : e-mail + mot de passe. Seul un compte `ACTIVE` se connecte ; `PENDING`/`REFUSED` → message « compte non actif » ; `ANONYMIZED` ne se connecte plus. Chaque profil ne voit que ses pages : un commerce ses lots, une association ses réservations. Session, cookie, CSRF, codes 401/403 : voir [security.md](security.md).
+- **Se connecter** : e-mail + mot de passe. Seul un compte `ACTIVE` se connecte ; `PENDING`/`REFUSED` → message « compte non actif » ; `ANONYMIZED` ne se connecte plus. **Blocage** : 5 échecs (mot de passe faux, e-mail inconnu ou compte anonymisé) en 15 min pour un même e-mail → connexion refusée pendant 15 min à partir du 5e échec, même avec le bon mot de passe ; les tentatives faites pendant le blocage sont refusées sans être comptées et ne le prolongent pas ; une connexion réussie remet le compteur à zéro ; même message que l'e-mail existe ou non. Chaque profil ne voit que ses pages : un commerce ses lots, une association ses réservations. Session, cookie, CSRF, codes 401/403 : voir [security.md](security.md).
 - **Valider ou refuser une inscription** (Coordination) : liste des comptes `PENDING` avec les informations saisies. Valider → `ACTIVE`, refuser → `REFUSED` (motif facultatif). Décision tracée (`decided_by`, `decided_at`). E-mail de décision au demandeur. Seul un compte `PENDING` peut être décidé : une décision est définitive (sinon « inscription introuvable ou déjà traitée », sans e-mail). Raison : deux membres de la Coordination qui traitent la même inscription en même temps ne doivent pas s'écraser ni envoyer deux e-mails contradictoires. Une erreur se corrige à la main, par la requête SQL du README (« Corriger une décision d'inscription »), qui remet le compte `PENDING`.
 
 ## Commerce (`declare-batch`)
@@ -53,7 +53,7 @@ Transitions autorisées (liste exhaustive) :
 
 ## Expiration (`expire-batches`)
 
-Tâche toutes les heures (retard max 1 h) : lots `DECLARED`/`RESERVED` dont `pickup_end` est dépassé → `EXPIRED` + `expired_at`. La même tâche supprime les sessions expirées. La marge d'1 h ne réduit pas la fenêtre de 24 h de confirmation de collecte.
+Tâche toutes les heures (retard max 1 h) : lots `DECLARED`/`RESERVED` dont `pickup_end` est dépassé → `EXPIRED` + `expired_at`. La même tâche supprime les sessions expirées et les échecs de connexion de plus de 15 min (`login_failure`) : passé ce délai ils ne servent plus au blocage, et ce sont des données personnelles (minimisation RGPD). La marge d'1 h ne réduit pas la fenêtre de 24 h de confirmation de collecte.
 
 ## Attestations (`certificates`)
 
