@@ -22,7 +22,7 @@ Les **commerces** déclarent leurs invendus sous forme de lots, les **associatio
 
 ## Le besoin
 
-Aujourd'hui, les dons passent par téléphone, e-mails et tableurs :
+Aujourd'hui, les dons passent par SMS ou appel à la coordination, un groupe de messagerie entre associations, des bons de collecte papier et un tableur mis à jour chaque mois :
 
 - un commerce ne sait pas qui viendra chercher ses invendus ;
 - deux associations se déplacent parfois pour le même lot, ou personne ne le réserve à temps ;

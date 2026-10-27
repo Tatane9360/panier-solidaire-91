@@ -44,6 +44,7 @@ Migrations : fichiers SQL écrits à la main dans `scripts/migrations/`, appliqu
 | Écrire des tests, vérifier qu'une tâche est terminée | [testing-quality.md](docs/claude/testing-quality.md) |
 | Écrire une page HTML ou un écran | [accessibility-mobile.md](docs/claude/accessibility-mobile.md) |
 | Branche, PR, bogue, livraison, README | [workflow.md](docs/claude/workflow.md) |
+| Comprendre le besoin, le commanditaire, le budget, le calendrier | [context.md](docs/claude/context.md) |
 | Comprendre un choix d'architecture | [docs/adr/](docs/adr/) |
 
 ## Agent skills
