@@ -32,6 +32,8 @@ Corriger la cause, ajouter un test de non-régression, et décrire dans la PR : 
 
 Pas d'hébergement pour le MVP : il est démontré en local depuis le dépôt cloné.
 
+Pour le pilote (avril à juin 2027, 3 associations et 15 commerces), l'hébergement devra être en France ou dans l'Union européenne et tenir, avec la maintenance et les licences, dans **6 000 € HT par an** (voir [context.md](context.md#contraintes-brief--23)).
+
 ## Livrables du dépôt
 
 - **README** : installation, lancement en local (avec et sans Docker), exécution des tests, variables d'environnement, **comptes de démonstration pour chaque profil**, requêtes SQL d'accès RGPD, script d'anonymisation.

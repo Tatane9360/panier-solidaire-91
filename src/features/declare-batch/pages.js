@@ -1,7 +1,6 @@
-import { page, escapeHtml, csrfField } from '../../shared/html.js';
+import { page, escapeHtml, csrfField, COLD_LABELS, formatLocal, formatDecimal } from '../../shared/html.js';
 
 const DATE_TYPE_LABELS = { DLC: 'DLC (date limite de consommation)', DDM: 'DDM (date de durabilité minimale)' };
-const COLD_LABELS = { AMBIENT: 'Ambiant', CHILLED: 'Frais', FROZEN: 'Surgelé' };
 const STATUS_LABELS = {
   DECLARED: 'Déclaré',
   RESERVED: 'Réservé',
@@ -23,15 +22,6 @@ const LABELS = {
   pickup_end: 'Fin du créneau de retrait',
   cold_requirement: 'Contrainte de froid',
 };
-
-// "2026-11-03T14:00" → "03/11/2026 14:00" ; "2026-11-05" → "05/11/2026".
-function formatLocal(value) {
-  const [date, time] = value.split('T');
-  const day = date.split('-').reverse().join('/');
-  return time ? `${day} ${time}` : day;
-}
-
-const formatDecimal = (value) => String(value).replace('.', ',');
 
 // Chaque erreur est reliée à son champ (aria-describedby) et annoncée dans le résumé (role="alert").
 function errorAttributes(errors, name) {

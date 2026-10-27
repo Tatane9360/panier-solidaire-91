@@ -101,6 +101,15 @@ async function createAccount(db, clock, fields = {}) {
   return { ...account, id: rows[0].id };
 }
 
+// Un tableau envoie plusieurs valeurs sous le même nom, comme des cases cochées.
+function formBody(form) {
+  const params = new URLSearchParams();
+  for (const [name, value] of Object.entries(form)) {
+    for (const item of [value].flat()) params.append(name, item);
+  }
+  return params;
+}
+
 // Client HTTP qui garde le cookie de session et le dernier jeton CSRF reçu.
 function createClient(baseUrl) {
   let cookie = '';
@@ -113,7 +122,7 @@ function createClient(baseUrl) {
       headers: form
         ? { cookie, 'content-type': 'application/x-www-form-urlencoded' }
         : { cookie },
-      body: form ? new URLSearchParams(form) : undefined,
+      body: form ? formBody(form) : undefined,
     });
     const setCookie = response.headers.get('set-cookie');
     if (setCookie) cookie = setCookie.split(';')[0];

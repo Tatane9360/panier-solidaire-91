@@ -29,6 +29,7 @@
 ## Charge
 
 - Cible : 35 lots/h, temps de réponse < 2 s.
+- Le réseau doit pouvoir doubler (environ 28 associations et 126 commerces, voir [context.md](context.md#contraintes-brief--23)) sans refonte.
 - Script **k6** sur la réservation. k6 s'utilise en CLI et ne figure pas dans les dépendances du projet.
 
 ## Definition of Done

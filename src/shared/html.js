@@ -8,6 +8,17 @@ export function escapeHtml(value) {
     .replaceAll("'", '&#39;');
 }
 
+export const COLD_LABELS = { AMBIENT: 'Ambiant', CHILLED: 'Frais', FROZEN: 'Surgelé' };
+
+// "2026-11-03T14:00" → "03/11/2026 14:00" ; "2026-11-05" → "05/11/2026".
+export function formatLocal(value) {
+  const [date, time] = value.split('T');
+  const day = date.split('-').reverse().join('/');
+  return time ? `${day} ${time}` : day;
+}
+
+export const formatDecimal = (value) => String(value).replace('.', ',');
+
 export function csrfField(session) {
   return `<input type="hidden" name="_csrf" value="${escapeHtml(session.csrfToken)}">`;
 }

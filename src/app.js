@@ -4,6 +4,7 @@ import { sessions } from './shared/sessions.js';
 import { protectActions } from './shared/access.js';
 import { accountsRoutes } from './features/accounts/routes.js';
 import { declareBatchRoutes } from './features/declare-batch/routes.js';
+import { reserveBatchRoutes } from './features/reserve-batch/routes.js';
 
 const publicDir = fileURLToPath(new URL('../public/', import.meta.url));
 
@@ -17,5 +18,6 @@ export function buildApp({ db, notifications, clock, config }) {
   app.use(protectActions({ publicActions: ['/login', '/register'] }));
   app.use(accountsRoutes({ db, notifications, clock }));
   app.use(declareBatchRoutes({ db, clock }));
+  app.use(reserveBatchRoutes({ db, clock }));
   return app;
 }

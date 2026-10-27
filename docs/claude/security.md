@@ -35,6 +35,7 @@
 
 - **Minimisation** : ne collecter que les champs prévus. Pas de compte de bénévole, seulement leur prénom (`reserved_by_name`, `collected_by_name`).
 - Échanges chiffrés en TLS 1.2 ou 1.3.
+- Hébergement des données (base, sauvegardes, service d'e-mail) **en France ou dans l'Union européenne** (exigence du commanditaire, voir [context.md](context.md#contraintes-brief--23)).
 - Droits d'accès et de suppression traités **manuellement** par la Coordination, sur demande par e-mail (aucune fonctionnalité dans l'application) :
   - accès : requêtes SQL documentées dans le README (compte, lots, réservations) ;
   - suppression : script d'anonymisation documenté dans le README (voir [data-model.md](data-model.md#anonymisation)).
