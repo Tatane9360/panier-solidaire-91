@@ -35,6 +35,9 @@ export function homePage({ session }) {
     <h1 class="mb-6 text-2xl font-bold">Accueil</h1>
     <p class="mb-6">Connecté en tant que ${escapeHtml(session.account.organization_name)}.</p>
     ${session.account.role === 'COORDINATOR' ? '<p class="mb-6"><a href="/registrations" class="underline">Inscriptions en attente</a></p>' : ''}
+    ${session.account.role === 'STORE' ? `
+    <p class="mb-4"><a href="/batches/new" class="inline-block w-full rounded bg-green-800 px-4 py-3 text-center font-semibold text-white">Déclarer un lot</a></p>
+    <p class="mb-6"><a href="/batches" class="underline">Mes lots</a></p>` : ''}
     <form method="post" action="/logout">
       ${csrfField(session)}
       <button type="submit" class="rounded border border-slate-700 px-4 py-2">Se déconnecter</button>

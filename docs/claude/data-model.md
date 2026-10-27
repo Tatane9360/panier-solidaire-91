@@ -27,6 +27,7 @@
 - `pickup_start`*, `pickup_end`* `timestamptz` (créneau de retrait)
 - `cold_requirement`* ∈ `AMBIENT`, `CHILLED`, `FROZEN`
 - `status`* ∈ `DECLARED`, `RESERVED`, `COLLECTED`, `CANCELLED`, `EXPIRED`
+- `submission_token`* unique : jeton aléatoire du formulaire de déclaration, pour qu'une double soumission ne crée qu'un lot
 - `created_at`* (= date de déclaration), `collected_at`, `expired_at`
 
 **`reservation`**
