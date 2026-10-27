@@ -22,7 +22,12 @@ export function declareBatchRoutes({ db, clock }) {
        ORDER BY created_at DESC, id DESC`,
       [req.session.account.id],
     );
-    res.send(myBatchesPage({ session: req.session, batches: rows, declared: req.query.declared === '1' }));
+    res.send(myBatchesPage({
+      session: req.session,
+      batches: rows,
+      declared: req.query.declared === '1',
+      duplicate: req.query.duplicate === '1',
+    }));
   });
 
   // Le jeton de soumission suit le formulaire jusqu'à la confirmation.
@@ -59,7 +64,7 @@ export function declareBatchRoutes({ db, clock }) {
     }
 
     // L'index unique sur submission_token tranche : une double soumission ne crée qu'un lot.
-    await db.query(
+    const { rowCount } = await db.query(
       `INSERT INTO batch (store_id, nature, quantity, quantity_unit, weight_kg, value_eur,
                           expiry_date, date_type, pickup_start, pickup_end, cold_requirement,
                           status, submission_token, created_at)
@@ -83,7 +88,8 @@ export function declareBatchRoutes({ db, clock }) {
         clock.now(),
       ],
     );
-    res.redirect(303, '/batches?declared=1');
+    // Rien d'inséré : ce formulaire avait déjà servi, on le dit au commerce.
+    res.redirect(303, rowCount === 1 ? '/batches?declared=1' : '/batches?duplicate=1');
   });
 
   return router;
@@ -99,10 +105,16 @@ function readForm(body) {
   return Object.fromEntries(FIELDS.map((name) => [name, String(body[name] ?? '').trim()]));
 }
 
+const REQUIRED = 'Champ obligatoire.';
+const CHOOSE = 'Choisissez une option.';
+// Plus grande valeur d'une colonne PostgreSQL `integer`.
+const MAX_INTEGER = 2_147_483_647;
+
 // Les dates et créneaux saisis sont en heure de Paris : on les compare, en texte
 // (format ISO, donc ordre chronologique), à la date et à l'heure de Paris de l'horloge.
 function validate(values, now) {
   const errors = {};
+  // La locale suédoise (sv-SE) écrit la date au format ISO : "2026-11-02 10:00:00".
   const parisNow = now.toLocaleString('sv-SE', { timeZone: 'Europe/Paris' }).replace(' ', 'T').slice(0, 16);
   const parisToday = parisNow.slice(0, 10);
 
@@ -141,11 +153,6 @@ function validate(values, now) {
   }
   return errors;
 }
-
-const REQUIRED = 'Champ obligatoire.';
-const CHOOSE = 'Choisissez une option.';
-// Plus grande valeur d'une colonne PostgreSQL `integer`.
-const MAX_INTEGER = 2_147_483_647;
 
 function isPositiveDecimal(value) {
   return /^\d+([.,]\d+)?$/.test(value) && Number(toDecimal(value)) > 0;

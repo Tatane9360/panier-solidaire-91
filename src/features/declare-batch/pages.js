@@ -46,12 +46,16 @@ function errorMessage(errors, name) {
 
 function inputField({ name, values, errors, type = 'text', inputmode = '', hint = '' }) {
   const mode = inputmode ? ` inputmode="${inputmode}"` : '';
-  const hintBlock = hint ? `<p class="text-sm text-slate-700">${hint}</p>` : '';
+  const hintBlock = hint ? `<p id="aide-${name}" class="text-sm text-slate-700">${hint}</p>` : '';
+  // Le lecteur d'écran annonce l'aide puis l'erreur avec le champ.
+  const describedBy = [hint && `aide-${name}`, errors[name] && `erreur-${name}`].filter(Boolean).join(' ');
+  const invalid = errors[name] ? ' aria-invalid="true"' : '';
+  const described = describedBy ? ` aria-describedby="${describedBy}"` : '';
   return `
       <div>
         <label for="${name}" class="block font-semibold">${LABELS[name]}</label>
         ${hintBlock}
-        <input id="${name}" name="${name}" type="${type}"${mode} required value="${escapeHtml(values[name] ?? '')}"${errorAttributes(errors, name)}
+        <input id="${name}" name="${name}" type="${type}"${mode} required value="${escapeHtml(values[name] ?? '')}"${invalid}${described}
           class="mt-1 w-full rounded border border-slate-500 p-3">
         ${errorMessage(errors, name)}
       </div>`;
@@ -154,10 +158,14 @@ export function batchReviewPage({ session, values }) {
   });
 }
 
-export function myBatchesPage({ session, batches, declared }) {
-  const notice = declared
-    ? '<p role="status" class="mb-4 border-l-4 border-green-700 bg-green-50 p-3 text-green-900">Lot déclaré.</p>'
-    : '';
+export function myBatchesPage({ session, batches, declared, duplicate }) {
+  let notice = '';
+  if (declared) {
+    notice = '<p role="status" class="mb-4 border-l-4 border-green-700 bg-green-50 p-3 text-green-900">Lot déclaré.</p>';
+  }
+  if (duplicate) {
+    notice = `<p role="status" class="mb-4 border-l-4 border-amber-700 bg-amber-50 p-3 text-amber-900">Ce formulaire avait déjà été envoyé : le lot n’a été déclaré qu’une fois. Pour déclarer un autre lot, ouvrez un nouveau formulaire.</p>`;
+  }
   const items = batches
     .map((batch) => `
       <li class="rounded border border-slate-400 p-4">

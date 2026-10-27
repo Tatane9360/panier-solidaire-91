@@ -96,15 +96,22 @@ test('declared batch is DECLARED with its fields and the declaration time', asyn
 
 const countBatches = async () => (await env.db.query('SELECT count(*)::int AS count FROM batch')).rows[0].count;
 
-test('submitting the same declaration twice creates a single batch', async () => {
+test('submitting the same declaration twice creates a single batch and says so', async () => {
   const { client } = await loginAsStore();
   const form = await client.get('/batches/new');
   const values = { ...batch, submission_token: submissionToken(form.body) };
 
-  const [first, second] = await Promise.all([client.post('/batches', values), client.post('/batches', values)]);
-  assert.equal(first.status, 303);
-  assert.equal(second.status, 303);
-  assert.equal((await client.post('/batches', values)).status, 303);
+  const responses = await Promise.all([client.post('/batches', values), client.post('/batches', values)]);
+  assert.deepEqual(
+    responses.map((response) => response.location).sort(),
+    ['/batches?declared=1', '/batches?duplicate=1'],
+  );
+  assert.equal(await countBatches(), 1);
+
+  // Retour arrière, « Modifier », puis nouvel envoi du même formulaire : rien n'est créé, et c'est dit.
+  const again = await client.post('/batches', { ...values, nature: 'Autre nature' });
+  assert.equal(again.location, '/batches?duplicate=1');
+  assert.match((await client.get(again.location)).body, /déjà été envoyé/);
   assert.equal(await countBatches(), 1);
 });
 
@@ -229,5 +236,13 @@ test('visitor without session is sent to login, and gets 401 on actions', async 
   const client = env.client();
   assert.equal((await client.get('/batches')).location, '/login');
   assert.equal((await client.get('/batches/new')).location, '/login');
+  assert.equal((await client.post('/batches/review', batch)).status, 401);
   assert.equal((await client.post('/batches', batch)).status, 401);
+});
+
+test('field hints are linked to their field', async () => {
+  const { client } = await loginAsStore();
+  const { body } = await client.get('/batches/new');
+  assert.match(body, /id="aide-nature"/);
+  assert.match(body, /id="nature"[^>]*aria-describedby="aide-nature"/);
 });
