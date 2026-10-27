@@ -27,7 +27,7 @@ export async function install(db, clock, env) {
      VALUES ((SELECT min(id) FROM territory), 'COORDINATOR', 'ACTIVE', $1, $2, $3, $4, $5)
      ON CONFLICT (email) DO NOTHING`,
     [
-      env.COORDINATOR_EMAIL,
+      env.COORDINATOR_EMAIL.toLowerCase(),
       await hashPassword(env.COORDINATOR_PASSWORD),
       env.COORDINATOR_ORGANIZATION_NAME,
       env.COORDINATOR_ADDRESS,

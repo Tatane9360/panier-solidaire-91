@@ -13,7 +13,7 @@ export function buildApp({ db, notifications, clock, config }) {
   app.use(express.static(publicDir));
   app.use(express.urlencoded({ extended: false }));
   app.use(sessions({ db, clock, config }));
-  app.use(protectActions({ publicActions: ['/login'] }));
-  app.use(accountsRoutes({ db }));
+  app.use(protectActions({ publicActions: ['/login', '/register'] }));
+  app.use(accountsRoutes({ db, notifications, clock }));
   return app;
 }
