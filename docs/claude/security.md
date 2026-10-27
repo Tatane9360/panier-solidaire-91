@@ -13,7 +13,7 @@
 - Sessions côté serveur, en table `session`, expirées après **30 min** d'inactivité par défaut (configurable) ; la tâche horaire d'expiration les purge.
 - Cookie de session `HttpOnly`, `SameSite=Lax`, `Secure` en production.
 - Protection CSRF par jeton synchronisé, stocké dans la session et présent dans chaque formulaire, sans dépendance. Avant la connexion, une session anonyme (sans `account_id`) porte le jeton ; la connexion crée une nouvelle session avec un nouveau `sid` (contre la fixation de session).
-- 5 échecs de connexion en 15 min pour un même e-mail → connexion refusée pendant 15 min.
+- 5 échecs de connexion en 15 min pour un même e-mail → connexion refusée pendant 15 min (réponse **429**, même message que l'e-mail existe ou non ; détail dans [business-rules.md](business-rules.md#comptes-accounts)). Les tentatives pour un même e-mail sont traitées une par une (verrou `pg_advisory_xact_lock`), pour qu'une rafale de requêtes ne teste pas plus de 5 mots de passe. Un e-mail inconnu est vérifié contre un faux hash, pour que le temps de réponse ne révèle pas son existence.
 
 ## Injection
 

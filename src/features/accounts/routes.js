@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { Router } from 'express';
 import { requireRole } from '../../shared/access.js';
 import { errorPage } from '../../shared/html.js';
@@ -7,10 +8,13 @@ import { loginPage, homePage, registerPage, registeredPage, registrationsPage, a
 const WRONG_CREDENTIALS = 'Adresse e-mail ou mot de passe incorrect.';
 // Même message que l'e-mail existe ou non.
 const BLOCKED = 'Trop de tentatives de connexion : la connexion est bloquée pendant 15 minutes.';
-const NOT_ACTIVE ='Compte non actif : votre inscription n’a pas été validée.';
+const NOT_ACTIVE = 'Compte non actif : votre inscription n’a pas été validée.';
 const INCOMPLETE_REGISTRATION = 'Tous les champs sont obligatoires, et le type doit être commerce ou association.';
 const EMAIL_TAKEN = 'Cette adresse e-mail est déjà utilisée par un compte.';
 const REGISTRATION_NOT_FOUND = 'Inscription introuvable ou déjà traitée';
+
+// Hash d'un mot de passe aléatoire, que personne ne connaît (voir POST /login).
+const DUMMY_HASH = await hashPassword(randomBytes(16).toString('hex'));
 
 export function accountsRoutes({ db, notifications, clock }) {
   const router = Router();
@@ -24,47 +28,57 @@ export function accountsRoutes({ db, notifications, clock }) {
     const password = String(req.body.password ?? '');
     const now = clock.now();
 
-    // Bloqué : refus sans vérifier le mot de passe, et la tentative n'est pas comptée.
-    const block = await db.query(
-      `SELECT 1 FROM login_failure
-       WHERE email = $1 AND starts_block AND failed_at > $2::timestamptz - interval '15 minutes'`,
-      [email, now],
-    );
-    if (block.rowCount > 0) {
-      return res.status(429).send(loginPage({ session: req.session, error: BLOCKED, email }));
-    }
+    const result = await db.withTransaction(async (client) => {
+      // Un verrou par e-mail : les tentatives simultanées pour un même e-mail passent une par une,
+      // sinon une rafale de requêtes testerait plus de 5 mots de passe avant le blocage.
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [email]);
 
-    const { rows } = await db.query(
-      'SELECT id, status, password_hash FROM account WHERE email = $1',
-      [email],
-    );
-    const account = rows[0];
-
-    // Un compte anonymisé n'a plus de mot de passe : il ne peut plus se connecter.
-    const passwordOk = account?.password_hash
-      ? await verifyPassword(password, account.password_hash)
-      : false;
-    if (!passwordOk || account.status === 'ANONYMIZED') {
-      // Cet échec est le 5e en 15 minutes si 4 autres le précèdent dans la fenêtre.
-      const failure = await db.query(
-        `INSERT INTO login_failure (email, failed_at, starts_block)
-         SELECT $1, $2, count(*) >= 4 FROM login_failure
-         WHERE email = $1 AND failed_at > $2::timestamptz - interval '15 minutes'
-         RETURNING starts_block`,
+      // Bloqué : refus sans vérifier le mot de passe, et la tentative n'est pas comptée.
+      const block = await client.query(
+        `SELECT 1 FROM login_failure
+         WHERE email = $1 AND starts_block AND failed_at > $2::timestamptz - interval '15 minutes'`,
         [email, now],
       );
-      if (failure.rows[0].starts_block) {
-        return res.status(429).send(loginPage({ session: req.session, error: BLOCKED, email }));
+      if (block.rowCount > 0) return { blocked: true };
+
+      const { rows } = await client.query(
+        'SELECT id, status, password_hash FROM account WHERE email = $1',
+        [email],
+      );
+      const account = rows[0];
+
+      // Sans compte, ou compte anonymisé (sans mot de passe), on vérifie quand même contre un faux
+      // hash : la réponse prend le même temps et ne révèle pas si l'e-mail existe.
+      const hash = account?.password_hash ?? DUMMY_HASH;
+      const passwordOk = (await verifyPassword(password, hash)) && hash !== DUMMY_HASH;
+      if (!passwordOk || account.status === 'ANONYMIZED') {
+        // Cet échec est le 5e en 15 minutes si 4 autres le précèdent dans la fenêtre.
+        const failure = await client.query(
+          `INSERT INTO login_failure (email, failed_at, starts_block)
+           SELECT $1, $2, count(*) >= 4 FROM login_failure
+           WHERE email = $1 AND failed_at > $2::timestamptz - interval '15 minutes'
+           RETURNING starts_block`,
+          [email, now],
+        );
+        return { blocked: failure.rows[0].starts_block, wrongCredentials: true };
       }
+      if (account.status === 'ACTIVE') {
+        // Une connexion réussie remet le compteur d'échecs à zéro.
+        await client.query('DELETE FROM login_failure WHERE email = $1', [email]);
+      }
+      return { account };
+    });
+
+    if (result.blocked) {
+      return res.status(429).send(loginPage({ session: req.session, error: BLOCKED, email }));
+    }
+    if (result.wrongCredentials) {
       return res.status(401).send(loginPage({ session: req.session, error: WRONG_CREDENTIALS, email }));
     }
-    if (account.status !== 'ACTIVE') {
+    if (result.account.status !== 'ACTIVE') {
       return res.status(403).send(loginPage({ session: req.session, error: NOT_ACTIVE, email }));
     }
-
-    // Une connexion réussie remet le compteur d'échecs à zéro.
-    await db.query('DELETE FROM login_failure WHERE email = $1', [email]);
-    await req.startSession(account.id);
+    await req.startSession(result.account.id);
     res.redirect(303, '/');
   });
 

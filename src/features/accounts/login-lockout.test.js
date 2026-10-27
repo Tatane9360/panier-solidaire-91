@@ -81,3 +81,20 @@ test('the block applies to one email only', async () => {
 
   assert.equal((await env.client().login(other.email, other.password)).status, 303);
 });
+
+test('simultaneous failed attempts cannot get past the limit of 5', async () => {
+  const account = await env.createAccount();
+  // Chaque client charge d'abord le formulaire, puis tous l'envoient en même temps.
+  const clients = Array.from({ length: 30 }, () => env.client());
+  await Promise.all(clients.map((client) => client.get('/login')));
+  const attempts = clients.map((client) => client.post('/login', { email: account.email, password: 'mauvais-mot-de-passe' }));
+  const statuses = (await Promise.all(attempts)).map((response) => response.status);
+
+  // 4 échecs « mot de passe incorrect », puis le 5e ouvre le blocage et toutes les autres sont refusées.
+  assert.equal(statuses.filter((status) => status === 401).length, 4);
+  assert.equal(statuses.filter((status) => status === 429).length, 26);
+  // Seules 5 tentatives ont testé le mot de passe : les autres ont été refusées avant.
+  const { rows } = await env.db.query('SELECT count(*)::int AS count FROM login_failure');
+  assert.equal(rows[0].count, 5);
+  assert.equal((await env.client().login(account.email, account.password)).status, 429);
+});
