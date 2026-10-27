@@ -16,6 +16,7 @@ Les **commerces** déclarent leurs invendus sous forme de lots, les **associatio
 - [Installation et lancement](#installation-et-lancement)
 - [Tests et qualité](#tests-et-qualité)
 - [Sécurité et données personnelles](#sécurité-et-données-personnelles)
+- [Corriger une décision d'inscription](#corriger-une-décision-dinscription)
 - [Contribuer](#contribuer)
 - [Documentation](#documentation)
 
@@ -121,6 +122,20 @@ Un script d'installation crée les tables, le territoire pilote et le premier co
 - Minimisation RGPD : les bénévoles n'ont pas de compte, seul leur prénom est saisi.
 - Les demandes d'accès et de suppression sont traitées manuellement par la Coordination (requêtes SQL et script d'anonymisation documentés).
 - Aucun secret ni aucune donnée réelle dans ce dépôt.
+
+## Corriger une décision d'inscription
+
+Une décision sur une inscription est définitive dans l'application : si deux personnes de la Coordination traitent la même inscription, la seconde reçoit « Inscription introuvable ou déjà traitée » et le demandeur ne reçoit qu'un e-mail.
+
+Pour corriger une erreur (par exemple un refus donné au mauvais compte), remettre le compte en attente, puis le décider de nouveau depuis la page « Inscriptions en attente » : la nouvelle décision est tracée et l'e-mail part normalement.
+
+```sql
+UPDATE account
+SET status = 'PENDING', decided_by = NULL, decided_at = NULL, refusal_reason = NULL
+WHERE email = 'adresse-du-compte@example.org' AND status IN ('ACTIVE', 'REFUSED');
+```
+
+À lancer avec `psql "$DATABASE_URL"`. L'adresse s'écrit en minuscules.
 
 ## Contribuer
 
