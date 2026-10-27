@@ -96,3 +96,5 @@ En français, expéditeur `MAIL_FROM` (variable d'environnement). Un échec d'en
 ## Hors périmètre
 
 Ne pas coder : dons des drives et de Seine-et-Marne, SMS et notifications push, tournées de collecte, contrôle automatique de cohérence des valeurs, multi-réseau, table de points de collecte, droits RGPD en libre-service (procédure manuelle, voir [security.md](security.md#rgpd)).
+
+- **Photo et description d'un lot** (décision du 27/10/2026) : la déclaration garde sa liste de champs fermée. Le besoin est de faciliter le don pour le commerce, pas d'attirer les associations : les lots partent déjà vite. Une photo alourdit la déclaration sur smartphone personnel, coûte en stockage (budget de 6 000 € HT par an, hébergement en France ou dans l'UE) et peut montrer des personnes (RGPD). Une note de retrait facultative (accès, interlocuteur) sera évaluée sur les retours du pilote d'avril à juin 2027 (voir [context.md](context.md)).
