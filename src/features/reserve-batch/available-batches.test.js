@@ -125,7 +125,7 @@ test('association changes its cold capacity at any time', async () => {
   assert.match(page.body, /Capacité de froid enregistrée/);
   assert.match(page.body, /value="FROZEN" checked/);
 
-  await client.post('/cold-capacity', { cold_capacity: 'CHILLED' });
+  await client.post('/cold-capacity', { cold_capacity: ['CHILLED', 'CHILLED'] });
   const { rows } = await env.db.query('SELECT cold_capacity FROM account WHERE id = $1', [association.id]);
   assert.deepEqual(rows[0].cold_capacity, ['CHILLED']);
 });
@@ -134,8 +134,10 @@ test('cold capacity rejects an unknown cold level', async () => {
   const { association, client } = await setup();
   await client.get('/cold-capacity');
 
-  const { status } = await client.post('/cold-capacity', { cold_capacity: ['AMBIENT', 'HOT'] });
-  assert.equal(status, 400);
+  for (const level of ['HOT', 'toString']) {
+    const { status } = await client.post('/cold-capacity', { cold_capacity: ['AMBIENT', level] });
+    assert.equal(status, 400, level);
+  }
   const { rows } = await env.db.query('SELECT cold_capacity FROM account WHERE id = $1', [association.id]);
   assert.deepEqual(rows[0].cold_capacity, ['AMBIENT']);
 });

@@ -22,7 +22,7 @@ export function availableBatchesPage({ batches, coldCapacity, filtered }) {
       </li>`;
     })
     .join('');
-  const filter = filtered
+  const filterNotice = filtered
     ? `<p class="mb-6">Seuls les lots compatibles avec votre <a href="/cold-capacity" class="underline">capacité de froid</a> sont affichés.
       <a href="/available-batches?all=1" class="underline">Afficher tous les lots</a></p>`
     : `<p class="mb-6">Tous les lots sont affichés.
@@ -31,7 +31,7 @@ export function availableBatchesPage({ batches, coldCapacity, filtered }) {
     title: 'Lots disponibles',
     content: `
     <h1 class="mb-6 text-2xl font-bold">Lots disponibles</h1>
-    ${filter}
+    ${filterNotice}
     ${batches.length === 0 ? '<p>Aucun lot disponible pour l’instant.</p>' : `<ul class="space-y-4">${items}</ul>`}
     <p class="mt-6"><a href="/" class="underline">Revenir à l’accueil</a></p>`,
   });
@@ -52,7 +52,7 @@ export function coldCapacityPage({ session, coldCapacity, saved = false, error =
     ? '<p role="status" class="mb-4 border-l-4 border-green-700 bg-green-50 p-3 text-green-900">Capacité de froid enregistrée.</p>'
     : '';
   const alert = error
-    ? `<p role="alert" class="mb-4 border-l-4 border-red-700 bg-red-50 p-3 text-red-900">${escapeHtml(error)}</p>`
+    ? `<p id="erreur-cold_capacity" role="alert" class="mb-4 border-l-4 border-red-700 bg-red-50 p-3 text-red-900">${escapeHtml(error)}</p>`
     : '';
   return page({
     title: error ? 'Erreur – Capacité de froid' : 'Capacité de froid',
@@ -61,7 +61,7 @@ export function coldCapacityPage({ session, coldCapacity, saved = false, error =
     ${notice}${alert}
     <form method="post" action="/cold-capacity" class="space-y-4">
       ${csrfField(session)}
-      <fieldset>
+      <fieldset${error ? ' aria-describedby="erreur-cold_capacity"' : ''}>
         <legend class="font-semibold">Niveaux de température que votre association sait respecter</legend>
         ${boxes}
       </fieldset>

@@ -42,10 +42,11 @@ export function reserveBatchRoutes({ db, clock }) {
   });
 
   // Aucune case cochée : le champ est absent. Une seule : une chaîne. Plusieurs : un tableau.
+  // Le Set retire les doublons : la capacité est un ensemble.
   // La nouvelle capacité vaut pour les réservations futures seulement.
   router.post('/cold-capacity', associationOnly, async (req, res) => {
-    const coldCapacity = [req.body.cold_capacity ?? []].flat();
-    if (!coldCapacity.every((level) => level in COLD_LABELS)) {
+    const coldCapacity = [...new Set([req.body.cold_capacity ?? []].flat())];
+    if (!coldCapacity.every((level) => Object.keys(COLD_LABELS).includes(level))) {
       return res.status(400).send(coldCapacityPage({
         session: req.session,
         coldCapacity: await readColdCapacity(req.session.account.id),
