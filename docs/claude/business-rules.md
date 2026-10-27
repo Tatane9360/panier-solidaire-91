@@ -53,7 +53,7 @@ Transitions autorisées (liste exhaustive) :
 
 ## Expiration (`expire-batches`)
 
-Tâche toutes les heures (retard max 1 h) : lots `DECLARED`/`RESERVED` dont `pickup_end` est dépassé → `EXPIRED` + `expired_at`. La même tâche supprime les sessions expirées. La marge d'1 h ne réduit pas la fenêtre de 24 h de confirmation de collecte.
+Tâche toutes les heures (retard max 1 h) : lots `DECLARED`/`RESERVED` dont `pickup_end` est dépassé → `EXPIRED` + `expired_at`. La même tâche supprime les sessions expirées et les échecs de connexion de plus de 15 min (`login_failure`) : passé ce délai ils ne servent plus au blocage, et ce sont des données personnelles (minimisation RGPD). La marge d'1 h ne réduit pas la fenêtre de 24 h de confirmation de collecte.
 
 ## Attestations (`certificates`)
 

@@ -19,7 +19,7 @@
 
 **`session`** : `sid` PK, `account_id` FK (nul pour une session anonyme), `csrf_token`*, `expires_at`*. Une session anonyme porte le jeton CSRF des formulaires affichés avant la connexion ; la connexion la remplace par une session au nouveau `sid`.
 
-**`login_failure`** (échecs de connexion) : `id` PK, `email`* (tel que saisi, en minuscules, que le compte existe ou non), `failed_at`*, `starts_block`* (vrai pour le 5e échec en 15 min, qui ouvre un blocage de 15 min). Lignes supprimées pour un e-mail à sa connexion réussie.
+**`login_failure`** (échecs de connexion) : `id` PK, `email`* (tel que saisi, en minuscules, que le compte existe ou non), `failed_at`*, `starts_block`* (vrai pour le 5e échec en 15 min, qui ouvre un blocage de 15 min). Lignes supprimées pour un e-mail à sa connexion réussie, et par la tâche horaire au-delà de 15 min.
 
 **`batch`** (lot)
 - `id` PK, `store_id`* FK
