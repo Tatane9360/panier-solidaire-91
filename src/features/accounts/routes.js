@@ -8,6 +8,7 @@ const WRONG_CREDENTIALS = 'Adresse e-mail ou mot de passe incorrect.';
 const NOT_ACTIVE = 'Compte non actif : votre inscription n’a pas été validée.';
 const INCOMPLETE_REGISTRATION = 'Tous les champs sont obligatoires, et le type doit être commerce ou association.';
 const EMAIL_TAKEN = 'Cette adresse e-mail est déjà utilisée par un compte.';
+const REGISTRATION_NOT_FOUND = 'Inscription introuvable ou déjà traitée';
 
 export function accountsRoutes({ db, notifications, clock }) {
   const router = Router();
@@ -83,7 +84,7 @@ export function accountsRoutes({ db, notifications, clock }) {
   async function decide(req, res, { approved, refusalReason }) {
     const id = Number(req.params.id);
     if (!Number.isInteger(id)) {
-      return res.status(404).send(errorPage('Inscription introuvable ou déjà traitée'));
+      return res.status(404).send(errorPage(REGISTRATION_NOT_FOUND));
     }
     const { rows } = await db.query(
       `UPDATE account SET status = $1, decided_by = $2, decided_at = $3, refusal_reason = $4
@@ -92,7 +93,7 @@ export function accountsRoutes({ db, notifications, clock }) {
       [approved ? 'ACTIVE' : 'REFUSED', req.session.account.id, clock.now(), refusalReason, id],
     );
     if (rows.length === 0) {
-      return res.status(404).send(errorPage('Inscription introuvable ou déjà traitée'));
+      return res.status(404).send(errorPage(REGISTRATION_NOT_FOUND));
     }
     await notifications.registrationDecided({ email: rows[0].email, approved, refusalReason });
     res.redirect(303, '/registrations');

@@ -55,7 +55,7 @@ export function registerPage({ session, error = '', values = {} }) {
       const checked = values.role === role ? ' checked' : '';
       return `
         <div>
-          <input id="role-${role}" name="role" type="radio" value="${role}" required${checked}>
+          <input id="role-${role}" name="role" type="radio" value="${role}" required${checked}${describedBy}>
           <label for="role-${role}">${label}</label>
         </div>`;
     })

@@ -25,7 +25,7 @@ async function register(client, fields = registration) {
 test('registration form has exactly the expected fields', async () => {
   const { status, body } = await env.client().get('/register');
   assert.equal(status, 200);
-  const names = [...body.matchAll(/<(?:input|select)[^>]*\sname="([^"]+)"/g)]
+  const names = [...body.matchAll(/<(?:input|select|textarea)[^>]*\sname="([^"]+)"/g)]
     .map((match) => match[1])
     .filter((name) => name !== '_csrf');
   assert.deepEqual(new Set(names), new Set(['organization_name', 'role', 'address', 'email', 'password']));
@@ -41,7 +41,8 @@ test('registration creates a PENDING account in the pilot territory, without acc
   assert.match(response.body, /en attente de validation/);
 
   const { rows } = await env.db.query(
-    'SELECT role, status, organization_name, address, territory_id FROM account WHERE email = $1',
+    `SELECT role, status, organization_name, address, territory_id = (SELECT id FROM territory) AS in_pilot_territory
+     FROM account WHERE email = $1`,
     [registration.email],
   );
   assert.deepEqual(rows, [{
@@ -49,7 +50,7 @@ test('registration creates a PENDING account in the pilot territory, without acc
     status: 'PENDING',
     organization_name: registration.organization_name,
     address: registration.address,
-    territory_id: 1,
+    in_pilot_territory: true,
   }]);
 
   const login = await client.login(registration.email, registration.password);
