@@ -9,6 +9,7 @@ before(async () => {
     // Route réservée à la Coordination, pour vérifier le refus d'un autre profil.
     extend(app) {
       app.get('/coordination-only', requireRole('COORDINATOR'), (req, res) => res.send('ok'));
+      app.post('/coordination-only', requireRole('COORDINATOR'), (req, res) => res.send('ok'));
     },
   });
 });
@@ -50,8 +51,23 @@ test('session expires after 30 minutes of inactivity', async () => {
   const client = env.client();
   await client.login(account.email, account.password);
 
-  env.clock.advanceMinutes(31);
+  const other = env.client();
+  await other.login(account.email, account.password);
+
+  env.clock.advanceMinutes(29);
+  assert.equal((await other.get('/')).status, 200);
+  env.clock.advanceMinutes(1);
   assert.equal((await client.get('/')).location, '/login');
+});
+
+test('logged-in account that is no longer ACTIVE gets 403 on an action', async () => {
+  const account = await env.createAccount({ role: 'COORDINATOR' });
+  const client = env.client();
+  await client.login(account.email, account.password);
+  await client.get('/coordination-only');
+  await env.db.query("UPDATE account SET status = 'REFUSED' WHERE id = $1", [account.id]);
+
+  assert.equal((await client.post('/coordination-only')).status, 403);
 });
 
 test('activity keeps the session alive', async () => {

@@ -12,6 +12,16 @@ export function csrfField(session) {
   return `<input type="hidden" name="_csrf" value="${escapeHtml(session.csrfToken)}">`;
 }
 
+// Page d'erreur (401, 403) : un titre et un message, avec un lien vers la connexion.
+export function errorPage(message) {
+  return page({
+    title: message,
+    content: `
+    <h1 class="mb-6 text-2xl font-bold">${escapeHtml(message)}</h1>
+    <p><a href="/" class="underline">Revenir à l’accueil</a></p>`,
+  });
+}
+
 // Gabarit commun. `title` est du texte, `content` du HTML déjà échappé.
 export function page({ title, content }) {
   return `<!doctype html>
