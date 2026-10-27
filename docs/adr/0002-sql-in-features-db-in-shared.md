@@ -1,0 +1,3 @@
+# SQL écrit dans chaque feature, exécuté par `src/shared/`
+
+Chaque dossier de fonctionnalité contient ses requêtes SQL, mais l'accès à la base doit rester centralisé. Décision : chaque feature écrit ses propres requêtes, y compris le `SELECT … FOR UPDATE` de la réservation, lisible là où la règle s'applique, et les exécute par le client exposé dans `src/shared/` (pool `pg` et `withTransaction`). Ce client est le seul à ouvrir des connexions et des transactions. On évite ainsi une couche d'accès aux données commune, qui aurait regroupé dans `shared` le SQL de toutes les features et contourné l'interdiction d'import entre features.

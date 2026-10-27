@@ -1,0 +1,26 @@
+# Dépendances
+node_modules/
+
+# Configuration locale et secrets (le fichier d'exemple, lui, est versionné)
+.env
+.env.*
+!.env.example
+
+# Journaux et rapports
+*.log
+npm-debug.log*
+coverage/
+
+# Système et éditeurs
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Claude Code : réglages personnels et liens locaux vers .agents/skills/
+.claude/settings.local.json
+.claude/skills/
+.scratch/
+
+# Dossier de conception de travail, non publié
+a-fournir-pour-coder/
