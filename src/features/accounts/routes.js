@@ -5,7 +5,9 @@ import { hashPassword, verifyPassword } from '../../shared/password.js';
 import { loginPage, homePage, registerPage, registeredPage, registrationsPage, alreadyLoggedInPage } from './pages.js';
 
 const WRONG_CREDENTIALS = 'Adresse e-mail ou mot de passe incorrect.';
-const NOT_ACTIVE = 'Compte non actif : votre inscription n’a pas été validée.';
+// Même message que l'e-mail existe ou non.
+const BLOCKED = 'Trop de tentatives de connexion : la connexion est bloquée pendant 15 minutes.';
+const NOT_ACTIVE ='Compte non actif : votre inscription n’a pas été validée.';
 const INCOMPLETE_REGISTRATION = 'Tous les champs sont obligatoires, et le type doit être commerce ou association.';
 const EMAIL_TAKEN = 'Cette adresse e-mail est déjà utilisée par un compte.';
 const REGISTRATION_NOT_FOUND = 'Inscription introuvable ou déjà traitée';
@@ -20,6 +22,18 @@ export function accountsRoutes({ db, notifications, clock }) {
   router.post('/login', async (req, res) => {
     const email = String(req.body.email ?? '').trim().toLowerCase();
     const password = String(req.body.password ?? '');
+    const now = clock.now();
+
+    // Bloqué : refus sans vérifier le mot de passe, et la tentative n'est pas comptée.
+    const block = await db.query(
+      `SELECT 1 FROM login_failure
+       WHERE email = $1 AND starts_block AND failed_at > $2::timestamptz - interval '15 minutes'`,
+      [email, now],
+    );
+    if (block.rowCount > 0) {
+      return res.status(429).send(loginPage({ session: req.session, error: BLOCKED, email }));
+    }
+
     const { rows } = await db.query(
       'SELECT id, status, password_hash FROM account WHERE email = $1',
       [email],
@@ -31,12 +45,25 @@ export function accountsRoutes({ db, notifications, clock }) {
       ? await verifyPassword(password, account.password_hash)
       : false;
     if (!passwordOk || account.status === 'ANONYMIZED') {
+      // Cet échec est le 5e en 15 minutes si 4 autres le précèdent dans la fenêtre.
+      const failure = await db.query(
+        `INSERT INTO login_failure (email, failed_at, starts_block)
+         SELECT $1, $2, count(*) >= 4 FROM login_failure
+         WHERE email = $1 AND failed_at > $2::timestamptz - interval '15 minutes'
+         RETURNING starts_block`,
+        [email, now],
+      );
+      if (failure.rows[0].starts_block) {
+        return res.status(429).send(loginPage({ session: req.session, error: BLOCKED, email }));
+      }
       return res.status(401).send(loginPage({ session: req.session, error: WRONG_CREDENTIALS, email }));
     }
     if (account.status !== 'ACTIVE') {
       return res.status(403).send(loginPage({ session: req.session, error: NOT_ACTIVE, email }));
     }
 
+    // Une connexion réussie remet le compteur d'échecs à zéro.
+    await db.query('DELETE FROM login_failure WHERE email = $1', [email]);
     await req.startSession(account.id);
     res.redirect(303, '/');
   });
