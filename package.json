@@ -1,0 +1,25 @@
+{
+  "name": "panier-solidaire-91",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.18.3",
+  "engines": {
+    "node": ">=26"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env src/server.js",
+    "build:css": "tailwindcss -i src/styles.css -o public/app.css --minify",
+    "install:db": "node --env-file-if-exists=.env scripts/install.js",
+    "migrate": "node --env-file-if-exists=.env scripts/migrate.js",
+    "test": "node --env-file-if-exists=.env --test --test-concurrency=1"
+  },
+  "dependencies": {
+    "express": "^5.3.0",
+    "nodemailer": "^10.2.1",
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "tailwindcss": "~3.4.19"
+  }
+}

@@ -1,0 +1,17 @@
+# Facultatif : PostgreSQL et Mailpit pour le développement local.
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: panier
+      POSTGRES_PASSWORD: panier
+      POSTGRES_DB: panier
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./scripts/create-test-db.sql:/docker-entrypoint-initdb.d/create-test-db.sql:ro
+  mailpit:
+    image: axllent/mailpit
+    ports:
+      - "1025:1025"
+      - "8025:8025"

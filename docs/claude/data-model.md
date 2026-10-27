@@ -17,7 +17,7 @@
 - `decided_by` FK, `decided_at`, `refusal_reason` (décision sur l'inscription)
 - `created_at`*
 
-**`session`** : `sid` PK, `account_id`* FK, `expires_at`*.
+**`session`** : `sid` PK, `account_id` FK (nul pour une session anonyme), `csrf_token`*, `expires_at`*. Une session anonyme porte le jeton CSRF des formulaires affichés avant la connexion ; la connexion la remplace par une session au nouveau `sid`.
 
 **`batch`** (lot)
 - `id` PK, `store_id`* FK
