@@ -142,6 +142,18 @@ test('cold capacity rejects an unknown cold level', async () => {
   assert.deepEqual(rows[0].cold_capacity, ['AMBIENT']);
 });
 
+test('cold capacity requires at least one cold level and keeps the previous one', async () => {
+  const { association, client } = await setup();
+  await client.get('/cold-capacity');
+
+  const { status, body } = await client.post('/cold-capacity', {});
+  assert.equal(status, 400);
+  assert.match(body, /Cochez au moins une case/);
+  assert.match(body, /value="AMBIENT" checked/);
+  const { rows } = await env.db.query('SELECT cold_capacity FROM account WHERE id = $1', [association.id]);
+  assert.deepEqual(rows[0].cold_capacity, ['AMBIENT']);
+});
+
 test('available batches are filtered by cold capacity by default', async () => {
   const { store, client } = await setup();
   await insertBatch(store.id, { nature: 'Pain', cold_requirement: 'AMBIENT' });

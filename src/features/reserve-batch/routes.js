@@ -46,11 +46,15 @@ export function reserveBatchRoutes({ db, clock }) {
   // La nouvelle capacité vaut pour les réservations futures seulement.
   router.post('/cold-capacity', associationOnly, async (req, res) => {
     const coldCapacity = [...new Set([req.body.cold_capacity ?? []].flat())];
-    if (!coldCapacity.every((level) => Object.keys(COLD_LABELS).includes(level))) {
+    let error = '';
+    // Une capacité vide masquerait tous les lots : c'est presque toujours une case décochée par erreur.
+    if (coldCapacity.length === 0) error = 'Cochez au moins une case.';
+    else if (!coldCapacity.every((level) => Object.keys(COLD_LABELS).includes(level))) error = 'Niveau de froid inconnu.';
+    if (error) {
       return res.status(400).send(coldCapacityPage({
         session: req.session,
         coldCapacity: await readColdCapacity(req.session.account.id),
-        error: 'Niveau de froid inconnu.',
+        error,
       }));
     }
     await db.query('UPDATE account SET cold_capacity = $1 WHERE id = $2', [coldCapacity, req.session.account.id]);
