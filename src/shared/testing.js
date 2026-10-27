@@ -37,6 +37,7 @@ export async function setupTestApp({ config = {}, extend } = {}) {
       await resetDatabase(db);
       clock.set(START);
       mailbox.sent.length = 0;
+      mailbox.failing = false;
     },
     async close() {
       server.close();

@@ -10,7 +10,20 @@ export function createNotifications({ transport, from }) {
     }
   }
 
-  return { send };
+  // Décision de la Coordination sur une inscription, envoyée au demandeur.
+  function registrationDecided({ email, approved, refusalReason }) {
+    const decision = approved
+      ? 'Votre inscription a été validée. Vous pouvez dès maintenant vous connecter.'
+      : 'Votre inscription a été refusée.';
+    const reason = !approved && refusalReason ? `\nMotif : ${refusalReason}` : '';
+    return send({
+      to: email,
+      subject: 'Votre inscription au Panier Solidaire 91',
+      text: `Bonjour,\n\n${decision}${reason}\n\nLa Coordination du Panier Solidaire 91`,
+    });
+  }
+
+  return { send, registrationDecided };
 }
 
 export function createSmtpTransport({ host, port, user, password }) {
@@ -23,11 +36,14 @@ export function createSmtpTransport({ host, port, user, password }) {
 }
 
 // Utilisé par les tests : on vérifie destinataire et objet dans `sent`.
+// `failing` simule une panne du service d'e-mail.
 export function createMemoryTransport() {
   const sent = [];
   return {
     sent,
+    failing: false,
     async send(message) {
+      if (this.failing) throw new Error('Service d’e-mail indisponible (simulation)');
       sent.push(message);
     },
   };
