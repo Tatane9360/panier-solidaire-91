@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { requireRole } from '../../shared/access.js';
 import { errorPage } from '../../shared/html.js';
 import { hashPassword, verifyPassword } from '../../shared/password.js';
-import { loginPage, homePage, registerPage, registeredPage, registrationsPage } from './pages.js';
+import { loginPage, homePage, registerPage, registeredPage, registrationsPage, alreadyLoggedInPage } from './pages.js';
 
 const WRONG_CREDENTIALS = 'Adresse e-mail ou mot de passe incorrect.';
 const NOT_ACTIVE = 'Compte non actif : votre inscription n’a pas été validée.';
@@ -18,7 +18,7 @@ export function accountsRoutes({ db, notifications, clock }) {
   });
 
   router.post('/login', async (req, res) => {
-    const email = String(req.body.email ?? '').trim();
+    const email = String(req.body.email ?? '').trim().toLowerCase();
     const password = String(req.body.password ?? '');
     const { rows } = await db.query(
       'SELECT id, status, password_hash FROM account WHERE email = $1',
@@ -41,16 +41,20 @@ export function accountsRoutes({ db, notifications, clock }) {
     res.redirect(303, '/');
   });
 
+  // Une personne connectée doit se déconnecter avant d'inscrire une autre structure
+  // (par exemple un autre site de son commerce).
   router.get('/register', (req, res) => {
+    if (req.session.account) return res.send(alreadyLoggedInPage({ session: req.session }));
     res.send(registerPage({ session: req.session }));
   });
 
   router.post('/register', async (req, res) => {
+    if (req.session.account) return res.status(403).send(alreadyLoggedInPage({ session: req.session }));
     const values = {
       organization_name: String(req.body.organization_name ?? '').trim(),
       role: String(req.body.role ?? ''),
       address: String(req.body.address ?? '').trim(),
-      email: String(req.body.email ?? '').trim(),
+      email: String(req.body.email ?? '').trim().toLowerCase(),
     };
     const password = String(req.body.password ?? '');
     const missing = !values.organization_name || !values.address || !values.email || !password;

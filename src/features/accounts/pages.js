@@ -137,3 +137,17 @@ export function registrationsPage({ session, accounts }) {
     <p class="mt-6"><a href="/" class="underline">Revenir à l’accueil</a></p>`,
   });
 }
+
+export function alreadyLoggedInPage({ session }) {
+  return page({
+    title: 'Inscription',
+    content: `
+    <h1 class="mb-6 text-2xl font-bold">Inscription</h1>
+    <p class="mb-6">Vous êtes connecté en tant que ${escapeHtml(session.account.organization_name)}. Pour inscrire une autre structure, déconnectez-vous d’abord.</p>
+    <form method="post" action="/logout" class="mb-6">
+      ${csrfField(session)}
+      <button type="submit" class="rounded border border-slate-700 px-4 py-2">Se déconnecter</button>
+    </form>
+    <p><a href="/" class="underline">Revenir à l’accueil</a></p>`,
+  });
+}

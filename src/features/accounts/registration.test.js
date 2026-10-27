@@ -230,3 +230,32 @@ test('registration review without session redirects to login, decision gets 401'
   await client.get('/login');
   assert.equal((await client.post(`/registrations/${id}/approve`)).status, 401);
 });
+
+test('email is case-insensitive: same address with other case is refused, login accepts any case', async () => {
+  await env.createAccount({ role: 'COORDINATOR' });
+  await register(env.client(), { ...registration, email: 'Epicerie@Example.org' });
+
+  const duplicate = await register(env.client());
+  assert.equal(duplicate.status, 409);
+
+  await env.db.query("UPDATE account SET status = 'ACTIVE' WHERE role = 'STORE'");
+  const login = await env.client().login('EPICERIE@example.org', registration.password);
+  assert.equal(login.status, 303);
+});
+
+test('logged-in account opening registration is told to log out first and cannot register', async () => {
+  const account = await env.createAccount({ organization_name: 'Boulangerie du Centre' });
+  const client = env.client();
+  await client.login(account.email, account.password);
+
+  const form = await client.get('/register');
+  assert.equal(form.status, 200);
+  assert.match(form.body, /Vous êtes connecté en tant que Boulangerie du Centre/);
+  assert.match(form.body, /action="\/logout"/);
+  assert.doesNotMatch(form.body, /name="organization_name"/);
+
+  const response = await client.post('/register', registration);
+  assert.equal(response.status, 403);
+  const { rows } = await env.db.query('SELECT count(*)::int AS count FROM account');
+  assert.equal(rows[0].count, 1);
+});

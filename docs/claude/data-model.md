@@ -10,7 +10,7 @@
 - `id` PK, `territory_id`* FK (renseigné automatiquement à l'inscription, sans saisie)
 - `role`* ∈ `STORE`, `ASSOCIATION`, `COORDINATOR`
 - `status`* ∈ `PENDING`, `ACTIVE`, `REFUSED`, `ANONYMIZED`
-- `email`* unique, `password_hash` (nullable, vidé à l'anonymisation)
+- `email`* unique, toujours en minuscules (contrainte `CHECK`), `password_hash` (nullable, vidé à l'anonymisation)
 - `organization_name`*, `address`*
 - `cold_capacity` text[] (association) ⊆ {`AMBIENT`, `CHILLED`, `FROZEN`}, défaut `{AMBIENT}`
 - `notify_new_batches` boolean (association), défaut vrai
