@@ -12,7 +12,7 @@
 - Mots de passe hachés avec **scrypt** de `node:crypto` (sans dépendance) ; Argon2 ou bcrypt seraient aussi acceptables. Jamais en clair.
 - Sessions côté serveur, en table `session`, expirées après **30 min** d'inactivité par défaut (configurable) ; la tâche horaire d'expiration les purge.
 - Cookie de session `HttpOnly`, `SameSite=Lax`, `Secure` en production.
-- Protection CSRF par jeton synchronisé, stocké dans la session et présent dans chaque formulaire, sans dépendance.
+- Protection CSRF par jeton synchronisé, stocké dans la session et présent dans chaque formulaire, sans dépendance. Avant la connexion, une session anonyme (sans `account_id`) porte le jeton ; la connexion crée une nouvelle session avec un nouveau `sid` (contre la fixation de session).
 - 5 échecs de connexion en 15 min pour un même e-mail → connexion refusée pendant 15 min.
 
 ## Injection

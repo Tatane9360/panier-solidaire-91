@@ -15,6 +15,23 @@ Plateforme de gestion des dons alimentaires du **Panier Solidaire 91** (associat
 9. **Code explicable ligne à ligne** : simple plutôt qu'astucieux (revue de code à l'oral).
 10. **Ne pas inventer de règle** : si la documentation est muette, demander à l'utilisateur, puis consigner la décision dans [business-rules.md](docs/claude/business-rules.md), ou dans un ADR (`docs/adr/`) si elle est difficile à défaire.
 
+## Commandes
+
+Gestionnaire de paquets : **pnpm** (jamais npm). Copier `.env.example` en `.env` avant tout.
+
+| Action | Commande |
+|---|---|
+| Installer les dépendances | `pnpm install` |
+| Démarrer PostgreSQL et Mailpit (facultatif, Docker) | `docker compose up -d` (crée aussi la base `panier_test`) |
+| Installer la base (tables, Territoire pilote, premier `COORDINATOR`) | `pnpm run install:db` |
+| Appliquer les migrations seules | `pnpm run migrate` |
+| Compiler le CSS Tailwind | `pnpm run build:css` |
+| Lancer l'application | `pnpm start` |
+| Préparer la base de test | créer la base de `TEST_DATABASE_URL` ; les tests appliquent les migrations et la vident eux-mêmes |
+| Lancer les tests | `pnpm test` (un fichier : `node --env-file=.env --test <fichier>`) |
+
+Migrations : fichiers SQL écrits à la main dans `scripts/migrations/`, appliqués dans l'ordre de leur nom.
+
 ## Quel module lire ?
 
 | Tâche | Module |

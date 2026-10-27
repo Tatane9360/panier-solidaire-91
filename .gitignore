@@ -24,3 +24,6 @@ Thumbs.db
 
 # Dossier de conception de travail, non publié
 a-fournir-pour-coder/
+
+# CSS compilé par Tailwind (pnpm run build:css)
+public/app.css
