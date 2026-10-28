@@ -1,11 +1,14 @@
 import { Router } from 'express';
 import { requireRole } from '../../shared/access.js';
 import { COLD_LABELS } from '../../shared/html.js';
-import { availableBatchesPage, coldCapacityPage, reservationRefusedPage } from './pages.js';
+import { releaseReservation } from '../../shared/reservations.js';
+import {
+  availableBatchesPage, coldCapacityPage, reservationRefusedPage, reservationsPage, cancellationRefusedPage,
+} from './pages.js';
 
 const NOT_FOUND = 'Lot introuvable.';
 
-// Refus d'une réservation : code HTTP et message affiché à l'association.
+// Refus d'une réservation ou de son annulation : code HTTP et message affiché à l'association.
 class ReservationRefused extends Error {
   constructor(status, message, coldCapacityLink = false) {
     super(message);
@@ -14,7 +17,8 @@ class ReservationRefused extends Error {
   }
 }
 
-// Consulter les lots disponibles, les réserver et déclarer sa capacité de froid (association).
+// Consulter les lots disponibles, les réserver, annuler sa réservation
+// et déclarer sa capacité de froid (association).
 export function reserveBatchRoutes({ db, clock }) {
   const router = Router();
   const associationOnly = requireRole('ASSOCIATION');
@@ -108,6 +112,57 @@ export function reserveBatchRoutes({ db, clock }) {
       return res.status(error.status).send(reservationRefusedPage(error));
     }
     res.redirect(303, '/available-batches?reserved=1');
+  });
+
+  // Mes réservations : réservations actives de l'association sur des lots RESERVED.
+  router.get('/reservations', associationOnly, async (req, res) => {
+    const { rows } = await db.query(
+      `SELECT batch.id, batch.nature, batch.quantity, batch.quantity_unit, batch.weight_kg,
+              to_char(batch.pickup_start AT TIME ZONE 'Europe/Paris', 'YYYY-MM-DD"T"HH24:MI') AS pickup_start,
+              to_char(batch.pickup_end AT TIME ZONE 'Europe/Paris', 'YYYY-MM-DD"T"HH24:MI') AS pickup_end,
+              reservation.reserved_by_name, store.organization_name, store.address
+       FROM reservation
+       JOIN batch ON batch.id = reservation.batch_id
+       JOIN account AS store ON store.id = batch.store_id
+       WHERE reservation.association_id = $1 AND reservation.cancelled_at IS NULL
+         AND batch.status = 'RESERVED'
+       ORDER BY batch.pickup_end, batch.id`,
+      [req.session.account.id],
+    );
+    res.send(reservationsPage({ session: req.session, batches: rows, cancelled: req.query.cancelled === '1' }));
+  });
+
+  // Annuler sa réservation : le verrou FOR UPDATE sur le lot sérialise l'annulation
+  // avec une réservation, une collecte ou une expiration simultanées.
+  router.post('/batches/:id/cancel-reservation', associationOnly, async (req, res) => {
+    if (!/^\d{1,9}$/.test(req.params.id)) {
+      return res.status(404).send(cancellationRefusedPage({ message: NOT_FOUND }));
+    }
+    try {
+      await db.withTransaction(async (client) => {
+        const { rows: [batch] } = await client.query(
+          `SELECT batch.status, reservation.association_id
+           FROM batch LEFT JOIN reservation ON reservation.batch_id = batch.id AND reservation.cancelled_at IS NULL
+           WHERE batch.id = $1
+           FOR UPDATE OF batch`,
+          [req.params.id],
+        );
+        if (!batch) throw new ReservationRefused(404, NOT_FOUND);
+        // Seule l'association réservataire : aussi pour un lot sans réservation active.
+        if (batch.association_id !== req.session.account.id) {
+          throw new ReservationRefused(403, 'Seule l’association qui a réservé ce lot peut annuler la réservation.');
+        }
+        if (batch.status !== 'RESERVED') throw new ReservationRefused(409, 'Ce lot n’est plus réservé : la réservation ne peut plus être annulée.');
+
+        await releaseReservation(client, { batchId: req.params.id, cancelledBy: req.session.account.id, now: clock.now() });
+        // Pas d'e-mail « Nouveau lot disponible » : le lot n'est pas nouveau.
+        await client.query("UPDATE batch SET status = 'DECLARED' WHERE id = $1", [req.params.id]);
+      });
+    } catch (error) {
+      if (!(error instanceof ReservationRefused)) throw error;
+      return res.status(error.status).send(cancellationRefusedPage(error));
+    }
+    res.redirect(303, '/reservations?cancelled=1');
   });
 
   router.get('/cold-capacity', associationOnly, async (req, res) => {

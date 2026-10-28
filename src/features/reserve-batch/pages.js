@@ -106,17 +106,66 @@ export function coldCapacityPage({ session, coldCapacity, saved = false, error =
   });
 }
 
-// Réservation refusée : le message, et le lien vers la capacité de froid si elle est en cause.
-export function reservationRefusedPage({ message, coldCapacityLink = false }) {
-  const coldHint = coldCapacityLink
-    ? '<p class="mb-4">Si votre association est équipée, <a href="/cold-capacity" class="underline">mettez à jour sa capacité de froid</a>.</p>'
+export function reservationsPage({ session, batches, cancelled = false }) {
+  const items = batches
+    .map((batch) => `
+      <li class="rounded border border-slate-400 p-4">
+        <h2 class="text-lg font-bold">${escapeHtml(batch.nature)}</h2>
+        <dl class="grid grid-cols-2 gap-x-4 gap-y-1">
+          <dt class="font-semibold">Quantité</dt><dd>${escapeHtml(batch.quantity)} ${escapeHtml(batch.quantity_unit)}</dd>
+          <dt class="font-semibold">Poids</dt><dd>${escapeHtml(formatDecimal(batch.weight_kg))} kg</dd>
+          <dt class="font-semibold">Créneau de retrait</dt><dd>du ${escapeHtml(formatLocal(batch.pickup_start))} au ${escapeHtml(formatLocal(batch.pickup_end))}</dd>
+          <dt class="font-semibold">Commerce</dt><dd>${escapeHtml(batch.organization_name)}<br>${escapeHtml(batch.address)}</dd>
+          <dt class="font-semibold">Bénévole</dt><dd>${escapeHtml(batch.reserved_by_name)}</dd>
+        </dl>
+        <form method="post" action="/batches/${batch.id}/cancel-reservation" class="mt-4">
+          ${csrfField(session)}
+          <button type="submit" class="w-full rounded border-2 border-red-800 px-4 py-3 font-semibold text-red-800">Annuler la réservation<span class="sr-only"> : ${escapeHtml(batch.nature)}</span></button>
+        </form>
+      </li>`)
+    .join('');
+  const notice = cancelled
+    ? '<p role="status" class="mb-4 border-l-4 border-green-700 bg-green-50 p-3 text-green-900">Réservation annulée. Le lot est de nouveau disponible pour les associations.</p>'
     : '';
   return page({
-    title: 'Réservation impossible',
+    title: 'Mes réservations',
     content: `
-    <h1 class="mb-6 text-2xl font-bold">Réservation impossible</h1>
+    <h1 class="mb-6 text-2xl font-bold">Mes réservations</h1>
+    ${notice}
+    ${batches.length === 0 ? '<p>Aucune réservation en cours.</p>' : `<ul class="space-y-4">${items}</ul>`}
+    <p class="mt-6"><a href="/available-batches" class="underline">Voir les lots disponibles</a></p>
+    <p class="mt-2"><a href="/" class="underline">Revenir à l’accueil</a></p>`,
+  });
+}
+
+// Refus : le message annoncé, une aide éventuelle et un lien de retour.
+function refusedPage({ title, message, hint = '', backLink }) {
+  return page({
+    title,
+    content: `
+    <h1 class="mb-6 text-2xl font-bold">${title}</h1>
     <p role="alert" class="mb-4 border-l-4 border-red-700 bg-red-50 p-3 text-red-900">${escapeHtml(message)}</p>
-    ${coldHint}
-    <p><a href="/available-batches" class="underline">Revenir aux lots disponibles</a></p>`,
+    ${hint}
+    <p>${backLink}</p>`,
+  });
+}
+
+// Réservation refusée : le message, et le lien vers la capacité de froid si elle est en cause.
+export function reservationRefusedPage({ message, coldCapacityLink = false }) {
+  return refusedPage({
+    title: 'Réservation impossible',
+    message,
+    hint: coldCapacityLink
+      ? '<p class="mb-4">Si votre association est équipée, <a href="/cold-capacity" class="underline">mettez à jour sa capacité de froid</a>.</p>'
+      : '',
+    backLink: '<a href="/available-batches" class="underline">Revenir aux lots disponibles</a>',
+  });
+}
+
+export function cancellationRefusedPage({ message }) {
+  return refusedPage({
+    title: 'Annulation impossible',
+    message,
+    backLink: '<a href="/reservations" class="underline">Revenir à mes réservations</a>',
   });
 }
