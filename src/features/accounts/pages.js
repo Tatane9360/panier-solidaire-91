@@ -40,6 +40,7 @@ export function homePage({ session }) {
     <p class="mb-6"><a href="/batches" class="underline">Mes lots</a></p>` : ''}
     ${session.account.role === 'ASSOCIATION' ? `
     <p class="mb-4"><a href="/available-batches" class="inline-block w-full rounded bg-green-800 px-4 py-3 text-center font-semibold text-white">Lots disponibles</a></p>
+    <p class="mb-2"><a href="/reservations" class="underline">Mes réservations</a></p>
     <p class="mb-6"><a href="/cold-capacity" class="underline">Capacité de froid</a></p>` : ''}
     <form method="post" action="/logout">
       ${csrfField(session)}

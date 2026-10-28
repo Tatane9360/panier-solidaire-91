@@ -214,3 +214,121 @@ test('reservation without a session gets 401, other profiles and inactive accoun
   assert.equal((await client.post(`/batches/${batchId}/reserve`, { reserved_by_name: 'Karim' })).status, 403);
   assert.equal(await batchStatus(batchId), 'DECLARED');
 });
+
+// Réserve le lot par HTTP, puis renvoie la page Mes réservations.
+async function reserveAndListReservations(client, batchId) {
+  await client.post(`/batches/${batchId}/reserve`, { reserved_by_name: 'Karim' });
+  return client.get('/reservations');
+}
+
+test('association cancels its reservation: the batch is available again and the reservation is kept', async () => {
+  const { association, batchId, client } = await setup();
+  const reservations = await reserveAndListReservations(client, batchId);
+  assert.match(reservations.body, /Fruits et légumes/);
+  assert.match(reservations.body, new RegExp(`action="/batches/${batchId}/cancel-reservation"`));
+  env.clock.advanceMinutes(5);
+
+  const cancelled = await client.post(`/batches/${batchId}/cancel-reservation`);
+  assert.equal(cancelled.status, 303);
+  const after = await client.get(cancelled.location);
+  assert.match(after.body, /Réservation annulée/);
+  assert.doesNotMatch(after.body, /Fruits et légumes/);
+
+  assert.equal(await batchStatus(batchId), 'DECLARED');
+  assert.match((await client.get('/available-batches')).body, new RegExp(`/batches/${batchId}/reserve"`));
+  const { rows } = await env.db.query('SELECT cancelled_by, cancelled_at FROM reservation WHERE batch_id = $1', [batchId]);
+  assert.deepEqual(rows, [{ cancelled_by: association.id, cancelled_at: env.clock.now() }]);
+  // Pas d'e-mail « Nouveau lot disponible » à l'annulation.
+  assert.equal(env.mailbox.sent.length, 0);
+});
+
+test('after a cancellation, another association can reserve the batch again', async () => {
+  const { batchId, client } = await setup();
+  await reserveAndListReservations(client, batchId);
+  await client.post(`/batches/${batchId}/cancel-reservation`);
+
+  const other = await loggedIn(await env.createAccount({ role: 'ASSOCIATION' }));
+  await other.get('/cold-capacity');
+  const { status } = await other.post(`/batches/${batchId}/reserve`, { reserved_by_name: 'Inès' });
+  assert.equal(status, 303);
+  assert.equal(await batchStatus(batchId), 'RESERVED');
+  assert.match((await other.get('/reservations')).body, /Inès/);
+});
+
+test('my reservations only lists the active reservations of the logged-in association', async () => {
+  const { store, batchId, client } = await setup();
+  const otherBatch = await insertBatch(store.id, { nature: 'Pain du jour' });
+  const other = await loggedIn(await env.createAccount({ role: 'ASSOCIATION' }));
+  await other.get('/cold-capacity');
+  await other.post(`/batches/${otherBatch}/reserve`, { reserved_by_name: 'Inès' });
+
+  assert.match((await reserveAndListReservations(client, batchId)).body, /Fruits et légumes/);
+  await client.post(`/batches/${batchId}/cancel-reservation`);
+  const page = (await client.get('/reservations')).body;
+  assert.doesNotMatch(page, /Fruits et légumes/);
+  assert.doesNotMatch(page, /Pain du jour/);
+  assert.match(page, /Aucune réservation en cours/);
+});
+
+test('only the reserving association cancels, and only a RESERVED batch', async () => {
+  const { association, store, batchId, client } = await setup();
+  await reserveAndListReservations(client, batchId);
+
+  // Une autre association : 403, la réservation reste active.
+  const other = await loggedIn(await env.createAccount({ role: 'ASSOCIATION' }));
+  await other.get('/cold-capacity');
+  const refused = await other.post(`/batches/${batchId}/cancel-reservation`);
+  assert.equal(refused.status, 403);
+  assert.match(refused.body, /Seule l’association qui a réservé ce lot/);
+  assert.equal(await batchStatus(batchId), 'RESERVED');
+
+  // Lot sans réservation active : 403 aussi.
+  const declared = await insertBatch(store.id);
+  assert.equal((await client.post(`/batches/${declared}/cancel-reservation`)).status, 403);
+
+  // Lot expiré avec sa réservation active : ni annulation ni changement.
+  await env.db.query("UPDATE batch SET status = 'EXPIRED' WHERE id = $1", [batchId]);
+  const expired = await client.post(`/batches/${batchId}/cancel-reservation`);
+  assert.equal(expired.status, 409);
+  assert.match(expired.body, /n’est plus réservé/);
+  assert.equal(await batchStatus(batchId), 'EXPIRED');
+  const { rows } = await env.db.query('SELECT cancelled_at FROM reservation WHERE batch_id = $1', [batchId]);
+  assert.deepEqual(rows, [{ cancelled_at: null }]);
+
+  for (const id of ['999999', 'abc', '99999999999']) {
+    assert.equal((await client.post(`/batches/${id}/cancel-reservation`)).status, 404, id);
+  }
+
+  assert.equal((await env.client().post(`/batches/${batchId}/cancel-reservation`)).status, 401);
+  for (const role of ['STORE', 'COORDINATOR']) {
+    const someone = await loggedIn(await env.createAccount({ role }));
+    await someone.get('/');
+    assert.equal((await someone.post(`/batches/${batchId}/cancel-reservation`)).status, 403, role);
+    assert.equal((await someone.get('/reservations')).status, 403, role);
+  }
+  await env.db.query("UPDATE account SET status = 'REFUSED' WHERE id = $1", [association.id]);
+  assert.equal((await client.post(`/batches/${batchId}/cancel-reservation`)).status, 403);
+});
+
+test('refuses cancellation once the pickup slot has passed, even before the scheduler expires the batch', async () => {
+  const { batchId, client } = await setup({ pickup_start: '2026-11-02T08:00', pickup_end: '2026-11-02T10:20' });
+  await reserveAndListReservations(client, batchId);
+  // 10 h 20 pile : le créneau est terminé.
+  env.clock.advanceMinutes(20);
+
+  // Le lot reste affiché, sans bouton d'annulation.
+  const reservations = (await client.get('/reservations')).body;
+  assert.match(reservations, /Fruits et légumes/);
+  assert.doesNotMatch(reservations, /cancel-reservation/);
+
+  const { status, body } = await client.post(`/batches/${batchId}/cancel-reservation`);
+  assert.equal(status, 409);
+  assert.match(body, /créneau de retrait de ce lot est terminé/);
+  assert.equal(await batchStatus(batchId), 'RESERVED');
+});
+
+test('my reservations without a session redirects to the login page', async () => {
+  const { status, location } = await env.client().get('/reservations');
+  assert.equal(status, 303);
+  assert.equal(location, '/login');
+});
