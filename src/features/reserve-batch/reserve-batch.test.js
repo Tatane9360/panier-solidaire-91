@@ -167,7 +167,10 @@ test('refuses reservation without the volunteer first name', async () => {
   for (const form of [{}, { reserved_by_name: '   ' }]) {
     const { status, body } = await client.post(`/batches/${batchId}/reserve`, form);
     assert.equal(status, 400);
-    assert.match(body, /Indiquez le prénom du bénévole/);
+    // La liste est réaffichée, l'erreur annoncée et reliée au champ du lot.
+    assert.match(body, /role="alert"[\s\S]*Indiquez le prénom du bénévole/);
+    assert.match(body, new RegExp(`id="reserved_by_name-${batchId}"[^>]*aria-invalid="true" aria-describedby="erreur-reserved_by_name-${batchId}"`));
+    assert.match(body, new RegExp(`id="erreur-reserved_by_name-${batchId}"`));
   }
   assert.equal(await batchStatus(batchId), 'DECLARED');
 });

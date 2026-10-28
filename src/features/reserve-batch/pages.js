@@ -1,30 +1,38 @@
 import { page, escapeHtml, csrfField, COLD_LABELS, formatLocal, formatDecimal } from '../../shared/html.js';
 
+const NAME_ERROR = 'Indiquez le prénom du bénévole qui retirera le lot.';
+
 // Formulaire de réservation d'un lot : le prénom du bénévole est obligatoire.
-function reserveForm(session, batch) {
+// Prénom manquant : l'erreur est affichée sous le champ et reliée à lui.
+function reserveForm(session, batch, nameError) {
   const id = `reserved_by_name-${batch.id}`;
+  const error = nameError === batch.id
+    ? `<p id="erreur-${id}" class="font-semibold text-red-800">${NAME_ERROR}</p>`
+    : '';
+  const invalid = error ? ` aria-invalid="true" aria-describedby="erreur-${id}"` : '';
   return `
         <form method="post" action="/batches/${batch.id}/reserve" class="mt-4 space-y-2">
           ${csrfField(session)}
           <label for="${id}" class="block font-semibold">Prénom du bénévole qui retirera le lot</label>
-          <input id="${id}" name="reserved_by_name" type="text" required class="w-full rounded border border-slate-500 p-3">
+          <input id="${id}" name="reserved_by_name" type="text" required${invalid} class="w-full rounded border border-slate-500 p-3">
+          ${error}
           <button type="submit" class="w-full rounded bg-green-800 px-4 py-3 font-semibold text-white">Réserver ce lot</button>
         </form>`;
 }
 
-export function availableBatchesPage({ session, batches, coldCapacity, filtered, reserved = false }) {
+export function availableBatchesPage({ session, batches, coldCapacity, filtered, reserved = false, nameError = null }) {
   const items = batches
     .map((batch) => {
       // Filtre désactivé : le texte signale le lot que l'association ne peut pas réserver,
       // et aucun formulaire n'est proposé.
       const compatible = coldCapacity.includes(batch.cold_requirement);
-      const incompatible = compatible
+      const incompatibleNotice = compatible
         ? ''
         : '<p class="mb-2 font-semibold">Incompatible avec votre capacité de froid</p>';
       return `
       <li class="rounded border border-slate-400 p-4">
         <h2 class="text-lg font-bold">${escapeHtml(batch.nature)}</h2>
-        ${incompatible}
+        ${incompatibleNotice}
         <dl class="grid grid-cols-2 gap-x-4 gap-y-1">
           <dt class="font-semibold">Quantité</dt><dd>${escapeHtml(batch.quantity)} ${escapeHtml(batch.quantity_unit)}</dd>
           <dt class="font-semibold">Poids</dt><dd>${escapeHtml(formatDecimal(batch.weight_kg))} kg</dd>
@@ -33,20 +41,26 @@ export function availableBatchesPage({ session, batches, coldCapacity, filtered,
           <dt class="font-semibold">Froid</dt><dd>${COLD_LABELS[batch.cold_requirement]}</dd>
           <dt class="font-semibold">Commerce</dt><dd>${escapeHtml(batch.organization_name)}<br>${escapeHtml(batch.address)}</dd>
         </dl>
-        ${compatible ? reserveForm(session, batch) : ''}
+        ${compatible ? reserveForm(session, batch, nameError) : ''}
       </li>`;
     })
     .join('');
-  const notice = reserved
-    ? '<p role="status" class="mb-4 border-l-4 border-green-700 bg-green-50 p-3 text-green-900">Lot réservé. Le commerce verra le prénom du bénévole.</p>'
-    : '';
+  let notice = '';
+  if (reserved) {
+    notice = '<p role="status" class="mb-4 border-l-4 border-green-700 bg-green-50 p-3 text-green-900">Lot réservé. Le commerce verra le prénom du bénévole.</p>';
+  }
+  // Résumé annoncé, avec un lien vers le champ en erreur.
+  if (nameError) {
+    notice = `<p role="alert" class="mb-4 border-l-4 border-red-700 bg-red-50 p-3 text-red-900">
+      <a href="#reserved_by_name-${nameError}" class="underline">${NAME_ERROR}</a></p>`;
+  }
   const filterNotice = filtered
     ? `<p class="mb-6">Seuls les lots compatibles avec votre <a href="/cold-capacity" class="underline">capacité de froid</a> sont affichés.
       <a href="/available-batches?all=1" class="underline">Afficher tous les lots</a></p>`
     : `<p class="mb-6">Tous les lots sont affichés.
       <a href="/available-batches" class="underline">N’afficher que les lots compatibles avec ma capacité de froid</a></p>`;
   return page({
-    title: 'Lots disponibles',
+    title: nameError ? 'Erreur – Lots disponibles' : 'Lots disponibles',
     content: `
     <h1 class="mb-6 text-2xl font-bold">Lots disponibles</h1>
     ${notice}
