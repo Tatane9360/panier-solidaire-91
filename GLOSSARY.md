@@ -43,7 +43,7 @@ DLC (date limite de consommation) ou DDM (date de durabilité minimale) des denr
 _Éviter_ : date de péremption
 
 **Créneau de retrait** (`pickup_start`, `pickup_end`) :
-Plage horaire pendant laquelle le lot peut être retiré chez le commerce. Il est « dépassé » quand `pickup_end` est passé.
+Plage horaire pendant laquelle le lot peut être retiré chez le commerce. Il est « dépassé » dès que l'heure atteint `pickup_end` (à 18 h 00 pile pour un créneau finissant à 18 h).
 
 **Unité de quantité** (`quantity_unit`) :
 Unité dans laquelle la quantité d'un lot est exprimée (cagettes, portions, palette…).

@@ -162,6 +162,7 @@ export function myBatchesPage({ session, batches, declared, duplicate }) {
         <h2 class="text-lg font-bold">${escapeHtml(batch.nature)}</h2>
         <p class="mb-2">Statut : <strong>${STATUS_LABELS[batch.status]}</strong></p>
         ${batchDetails(batch)}
+        ${batch.reserved_by_name ? `<dl class="mt-1 grid grid-cols-2 gap-x-4"><dt class="font-semibold">Bénévole</dt><dd>${escapeHtml(batch.reserved_by_name)}</dd></dl>` : ''}
       </li>`)
     .join('');
   return page({

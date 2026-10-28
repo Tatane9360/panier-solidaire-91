@@ -13,13 +13,15 @@ export function declareBatchRoutes({ db, clock }) {
 
   router.get('/batches', storeOnly, async (req, res) => {
     const { rows } = await db.query(
-      `SELECT nature, quantity, quantity_unit, weight_kg, value_eur,
-              to_char(expiry_date, 'YYYY-MM-DD') AS expiry_date, date_type,
-              to_char(pickup_start AT TIME ZONE 'Europe/Paris', 'YYYY-MM-DD"T"HH24:MI') AS pickup_start,
-              to_char(pickup_end AT TIME ZONE 'Europe/Paris', 'YYYY-MM-DD"T"HH24:MI') AS pickup_end,
-              cold_requirement, status
-       FROM batch WHERE store_id = $1
-       ORDER BY created_at DESC, id DESC`,
+      `SELECT batch.nature, batch.quantity, batch.quantity_unit, batch.weight_kg, batch.value_eur,
+              to_char(batch.expiry_date, 'YYYY-MM-DD') AS expiry_date, batch.date_type,
+              to_char(batch.pickup_start AT TIME ZONE 'Europe/Paris', 'YYYY-MM-DD"T"HH24:MI') AS pickup_start,
+              to_char(batch.pickup_end AT TIME ZONE 'Europe/Paris', 'YYYY-MM-DD"T"HH24:MI') AS pickup_end,
+              batch.cold_requirement, batch.status, reservation.reserved_by_name
+       FROM batch
+       LEFT JOIN reservation ON reservation.batch_id = batch.id AND reservation.cancelled_at IS NULL
+       WHERE batch.store_id = $1
+       ORDER BY batch.created_at DESC, batch.id DESC`,
       [req.session.account.id],
     );
     res.send(myBatchesPage({

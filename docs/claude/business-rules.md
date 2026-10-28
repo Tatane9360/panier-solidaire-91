@@ -35,11 +35,11 @@ Transitions autorisées (liste exhaustive) :
 
 ## Association (`reserve-batch`)
 
-- **Consulter les lots disponibles** : lots `DECLARED` dont la date limite et le créneau ne sont pas dépassés (`pickup_end` antérieur à l'heure de l'horloge injectée ⇒ dépassé, sans attendre le planificateur). Affiche nature, quantité, poids, date limite (DLC/DDM), créneau, froid, nom et adresse du commerce. Tri par date limite croissante.
+- **Consulter les lots disponibles** : lots `DECLARED` dont la date limite et le créneau ne sont pas dépassés (créneau dépassé dès que l'heure de l'horloge injectée atteint `pickup_end`, sans attendre le planificateur). Affiche nature, quantité, poids, date limite (DLC/DDM), créneau, froid, nom et adresse du commerce. Tri par date limite croissante.
 - **Réserver un lot** (`POST /batches/{id}/reserve`, champ `reserved_by_name`) :
   1. Session absente → **401** ; autre profil ou compte non `ACTIVE` → **403**. Contrôles **avant** la transaction.
   2. `BEGIN` → `SELECT … FROM batch … FOR UPDATE` (écrit en clair).
-  3. Condition : `status = 'DECLARED'`, `pickup_end` non dépassé (réservation possible avant `pickup_start`), `cold_requirement ∈ cold_capacity`.
+  3. Condition : `status = 'DECLARED'`, `pickup_end` non dépassé (réservation possible avant `pickup_start` ; refusée dès que l'horloge atteint `pickup_end`, 18 h 00 pile compris pour un créneau finissant à 18 h : personne ne pourrait plus retirer le lot, et il a déjà quitté la liste des lots disponibles ; décision du 28/10/2026, ticket #7), `cold_requirement ∈ cold_capacity`.
   4. OK → `INSERT reservation` + `UPDATE batch SET status = 'RESERVED'` + `COMMIT`. Sinon `ROLLBACK` et message.
   - Deux demandes simultanées : une seule réussit, l'autre reçoit « lot déjà réservé ».
   - Froid incompatible : **refus bloquant** (obligation sanitaire), avec un message invitant à mettre à jour sa capacité de froid si l'association est équipée.
