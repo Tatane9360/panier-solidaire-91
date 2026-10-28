@@ -118,10 +118,11 @@ export function reservationsPage({ session, batches, cancelled = false }) {
           <dt class="font-semibold">Commerce</dt><dd>${escapeHtml(batch.organization_name)}<br>${escapeHtml(batch.address)}</dd>
           <dt class="font-semibold">Bénévole</dt><dd>${escapeHtml(batch.reserved_by_name)}</dd>
         </dl>
+        ${batch.cancellable ? `
         <form method="post" action="/batches/${batch.id}/cancel-reservation" class="mt-4">
           ${csrfField(session)}
           <button type="submit" class="w-full rounded border-2 border-red-800 px-4 py-3 font-semibold text-red-800">Annuler la réservation<span class="sr-only"> : ${escapeHtml(batch.nature)}</span></button>
-        </form>
+        </form>` : '<p class="mt-4">Créneau de retrait terminé.</p>'}
       </li>`)
     .join('');
   const notice = cancelled

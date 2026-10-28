@@ -215,15 +215,15 @@ test('reservation without a session gets 401, other profiles and inactive accoun
   assert.equal(await batchStatus(batchId), 'DECLARED');
 });
 
-// Réserve le lot par HTTP et renvoie le formulaire d'annulation de la page Mes réservations.
-async function reserve(client, batchId) {
+// Réserve le lot par HTTP, puis renvoie la page Mes réservations.
+async function reserveAndListReservations(client, batchId) {
   await client.post(`/batches/${batchId}/reserve`, { reserved_by_name: 'Karim' });
   return client.get('/reservations');
 }
 
 test('association cancels its reservation: the batch is available again and the reservation is kept', async () => {
   const { association, batchId, client } = await setup();
-  const reservations = await reserve(client, batchId);
+  const reservations = await reserveAndListReservations(client, batchId);
   assert.match(reservations.body, /Fruits et légumes/);
   assert.match(reservations.body, new RegExp(`action="/batches/${batchId}/cancel-reservation"`));
   env.clock.advanceMinutes(5);
@@ -244,7 +244,7 @@ test('association cancels its reservation: the batch is available again and the 
 
 test('after a cancellation, another association can reserve the batch again', async () => {
   const { batchId, client } = await setup();
-  await reserve(client, batchId);
+  await reserveAndListReservations(client, batchId);
   await client.post(`/batches/${batchId}/cancel-reservation`);
 
   const other = await loggedIn(await env.createAccount({ role: 'ASSOCIATION' }));
@@ -262,7 +262,7 @@ test('my reservations only lists the active reservations of the logged-in associ
   await other.get('/cold-capacity');
   await other.post(`/batches/${otherBatch}/reserve`, { reserved_by_name: 'Inès' });
 
-  assert.match((await reserve(client, batchId)).body, /Fruits et légumes/);
+  assert.match((await reserveAndListReservations(client, batchId)).body, /Fruits et légumes/);
   await client.post(`/batches/${batchId}/cancel-reservation`);
   const page = (await client.get('/reservations')).body;
   assert.doesNotMatch(page, /Fruits et légumes/);
@@ -272,7 +272,7 @@ test('my reservations only lists the active reservations of the logged-in associ
 
 test('only the reserving association cancels, and only a RESERVED batch', async () => {
   const { association, store, batchId, client } = await setup();
-  await reserve(client, batchId);
+  await reserveAndListReservations(client, batchId);
 
   // Une autre association : 403, la réservation reste active.
   const other = await loggedIn(await env.createAccount({ role: 'ASSOCIATION' }));
@@ -308,4 +308,27 @@ test('only the reserving association cancels, and only a RESERVED batch', async 
   }
   await env.db.query("UPDATE account SET status = 'REFUSED' WHERE id = $1", [association.id]);
   assert.equal((await client.post(`/batches/${batchId}/cancel-reservation`)).status, 403);
+});
+
+test('refuses cancellation once the pickup slot has passed, even before the scheduler expires the batch', async () => {
+  const { batchId, client } = await setup({ pickup_start: '2026-11-02T08:00', pickup_end: '2026-11-02T10:20' });
+  await reserveAndListReservations(client, batchId);
+  // 10 h 20 pile : le créneau est terminé.
+  env.clock.advanceMinutes(20);
+
+  // Le lot reste affiché, sans bouton d'annulation.
+  const reservations = (await client.get('/reservations')).body;
+  assert.match(reservations, /Fruits et légumes/);
+  assert.doesNotMatch(reservations, /cancel-reservation/);
+
+  const { status, body } = await client.post(`/batches/${batchId}/cancel-reservation`);
+  assert.equal(status, 409);
+  assert.match(body, /créneau de retrait de ce lot est terminé/);
+  assert.equal(await batchStatus(batchId), 'RESERVED');
+});
+
+test('my reservations without a session redirects to the login page', async () => {
+  const { status, location } = await env.client().get('/reservations');
+  assert.equal(status, 303);
+  assert.equal(location, '/login');
 });

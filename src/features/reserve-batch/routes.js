@@ -8,8 +8,11 @@ import {
 
 const NOT_FOUND = 'Lot introuvable.';
 
+// Plus de 9 chiffres pourrait dépasser une colonne `integer` : un tel lot n'existe pas.
+const isBatchId = (id) => /^\d{1,9}$/.test(id);
+
 // Refus d'une réservation ou de son annulation : code HTTP et message affiché à l'association.
-class ReservationRefused extends Error {
+class BatchActionRefused extends Error {
   constructor(status, message, coldCapacityLink = false) {
     super(message);
     this.status = status;
@@ -66,8 +69,7 @@ export function reserveBatchRoutes({ db, clock }) {
   // de sécurité en base : s'il se déclenchait malgré le verrou, la requête finirait en erreur 500.
   router.post('/batches/:id/reserve', associationOnly, async (req, res) => {
     const reservedByName = String(req.body.reserved_by_name ?? '').trim();
-    // Plus de 9 chiffres pourrait dépasser une colonne `integer` : un tel lot n'existe pas.
-    if (!/^\d{1,9}$/.test(req.params.id)) {
+    if (!isBatchId(req.params.id)) {
       return res.status(404).send(reservationRefusedPage({ message: NOT_FOUND }));
     }
     // La liste est réaffichée, l'erreur reliée au champ du lot concerné.
@@ -86,14 +88,14 @@ export function reserveBatchRoutes({ db, clock }) {
           'SELECT cold_capacity FROM account WHERE id = $1',
           [req.session.account.id],
         );
-        // Chaque refus lève une ReservationRefused : withTransaction fait alors ROLLBACK.
-        if (!batch) throw new ReservationRefused(404, NOT_FOUND);
-        if (batch.status === 'RESERVED') throw new ReservationRefused(409, 'Lot déjà réservé.');
-        if (batch.status !== 'DECLARED') throw new ReservationRefused(409, 'Ce lot n’est plus disponible.');
-        if (batch.pickup_end <= now) throw new ReservationRefused(409, 'Le créneau de retrait de ce lot est dépassé.');
+        // Chaque refus lève une BatchActionRefused : withTransaction fait alors ROLLBACK.
+        if (!batch) throw new BatchActionRefused(404, NOT_FOUND);
+        if (batch.status === 'RESERVED') throw new BatchActionRefused(409, 'Lot déjà réservé.');
+        if (batch.status !== 'DECLARED') throw new BatchActionRefused(409, 'Ce lot n’est plus disponible.');
+        if (batch.pickup_end <= now) throw new BatchActionRefused(409, 'Le créneau de retrait de ce lot est dépassé.');
         // Obligation sanitaire : refus bloquant.
         if (!account.cold_capacity.includes(batch.cold_requirement)) {
-          throw new ReservationRefused(
+          throw new BatchActionRefused(
             409,
             'Ce lot demande un niveau de froid que votre association ne sait pas respecter.',
             true,
@@ -108,26 +110,28 @@ export function reserveBatchRoutes({ db, clock }) {
         await client.query("UPDATE batch SET status = 'RESERVED' WHERE id = $1", [req.params.id]);
       });
     } catch (error) {
-      if (!(error instanceof ReservationRefused)) throw error;
+      if (!(error instanceof BatchActionRefused)) throw error;
       return res.status(error.status).send(reservationRefusedPage(error));
     }
     res.redirect(303, '/available-batches?reserved=1');
   });
 
   // Mes réservations : réservations actives de l'association sur des lots RESERVED.
+  // Créneau terminé : le lot reste affiché, sans bouton d'annulation.
   router.get('/reservations', associationOnly, async (req, res) => {
     const { rows } = await db.query(
       `SELECT batch.id, batch.nature, batch.quantity, batch.quantity_unit, batch.weight_kg,
               to_char(batch.pickup_start AT TIME ZONE 'Europe/Paris', 'YYYY-MM-DD"T"HH24:MI') AS pickup_start,
               to_char(batch.pickup_end AT TIME ZONE 'Europe/Paris', 'YYYY-MM-DD"T"HH24:MI') AS pickup_end,
-              reservation.reserved_by_name, store.organization_name, store.address
+              reservation.reserved_by_name, store.organization_name, store.address,
+              batch.pickup_end > $2 AS cancellable
        FROM reservation
        JOIN batch ON batch.id = reservation.batch_id
        JOIN account AS store ON store.id = batch.store_id
        WHERE reservation.association_id = $1 AND reservation.cancelled_at IS NULL
          AND batch.status = 'RESERVED'
        ORDER BY batch.pickup_end, batch.id`,
-      [req.session.account.id],
+      [req.session.account.id, clock.now()],
     );
     res.send(reservationsPage({ session: req.session, batches: rows, cancelled: req.query.cancelled === '1' }));
   });
@@ -135,31 +139,37 @@ export function reserveBatchRoutes({ db, clock }) {
   // Annuler sa réservation : le verrou FOR UPDATE sur le lot sérialise l'annulation
   // avec une réservation, une collecte ou une expiration simultanées.
   router.post('/batches/:id/cancel-reservation', associationOnly, async (req, res) => {
-    if (!/^\d{1,9}$/.test(req.params.id)) {
+    if (!isBatchId(req.params.id)) {
       return res.status(404).send(cancellationRefusedPage({ message: NOT_FOUND }));
     }
+    const now = clock.now();
     try {
       await db.withTransaction(async (client) => {
         const { rows: [batch] } = await client.query(
-          `SELECT batch.status, reservation.association_id
+          `SELECT batch.status, batch.pickup_end, reservation.association_id
            FROM batch LEFT JOIN reservation ON reservation.batch_id = batch.id AND reservation.cancelled_at IS NULL
            WHERE batch.id = $1
            FOR UPDATE OF batch`,
           [req.params.id],
         );
-        if (!batch) throw new ReservationRefused(404, NOT_FOUND);
+        if (!batch) throw new BatchActionRefused(404, NOT_FOUND);
         // Seule l'association réservataire : aussi pour un lot sans réservation active.
         if (batch.association_id !== req.session.account.id) {
-          throw new ReservationRefused(403, 'Seule l’association qui a réservé ce lot peut annuler la réservation.');
+          throw new BatchActionRefused(403, 'Seule l’association qui a réservé ce lot peut annuler la réservation.');
         }
-        if (batch.status !== 'RESERVED') throw new ReservationRefused(409, 'Ce lot n’est plus réservé : la réservation ne peut plus être annulée.');
+        if (batch.status !== 'RESERVED') throw new BatchActionRefused(409, 'Ce lot n’est plus réservé : la réservation ne peut plus être annulée.');
+        // Créneau terminé, même avant le planificateur : la réservation reste active
+        // pour que la collecte puisse encore être enregistrée.
+        if (batch.pickup_end <= now) {
+          throw new BatchActionRefused(409, 'Le créneau de retrait de ce lot est terminé : la réservation ne peut plus être annulée.');
+        }
 
-        await releaseReservation(client, { batchId: req.params.id, cancelledBy: req.session.account.id, now: clock.now() });
+        await releaseReservation(client, { batchId: req.params.id, cancelledBy: req.session.account.id, now });
         // Pas d'e-mail « Nouveau lot disponible » : le lot n'est pas nouveau.
         await client.query("UPDATE batch SET status = 'DECLARED' WHERE id = $1", [req.params.id]);
       });
     } catch (error) {
-      if (!(error instanceof ReservationRefused)) throw error;
+      if (!(error instanceof BatchActionRefused)) throw error;
       return res.status(error.status).send(cancellationRefusedPage(error));
     }
     res.redirect(303, '/reservations?cancelled=1');
