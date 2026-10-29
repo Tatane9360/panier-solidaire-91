@@ -106,7 +106,27 @@ export function coldCapacityPage({ session, coldCapacity, saved = false, error =
   });
 }
 
-export function reservationsPage({ session, batches, cancelled = false }) {
+const COLLECTED_NAME_ERROR = 'Indiquez le prénom du bénévole qui a retiré le lot.';
+
+// Formulaire de confirmation de la collecte, prénom prérempli avec celui de la réservation.
+// Prénom manquant : l'erreur est affichée sous le champ et reliée à lui.
+function confirmPickupForm(session, batch, nameError) {
+  const id = `collected_by_name-${batch.id}`;
+  const error = nameError === batch.id
+    ? `<p id="erreur-${id}" class="font-semibold text-red-800">${COLLECTED_NAME_ERROR}</p>`
+    : '';
+  const invalid = error ? ` aria-invalid="true" aria-describedby="erreur-${id}"` : '';
+  return `
+        <form method="post" action="/batches/${batch.id}/confirm-pickup" class="mt-4 space-y-2">
+          ${csrfField(session)}
+          <label for="${id}" class="block font-semibold">Prénom du bénévole qui a retiré le lot</label>
+          <input id="${id}" name="collected_by_name" type="text" required value="${escapeHtml(batch.reserved_by_name)}"${invalid} class="w-full rounded border border-slate-500 p-3">
+          ${error}
+          <button type="submit" class="w-full rounded bg-green-800 px-4 py-3 font-semibold text-white">Confirmer la collecte<span class="sr-only"> : ${escapeHtml(batch.nature)}</span></button>
+        </form>`;
+}
+
+export function reservationsPage({ session, batches, cancelled = false, collected = false, nameError = null }) {
   const items = batches
     .map((batch) => `
       <li class="rounded border border-slate-400 p-4">
@@ -123,13 +143,23 @@ export function reservationsPage({ session, batches, cancelled = false }) {
           ${csrfField(session)}
           <button type="submit" class="w-full rounded border-2 border-red-800 px-4 py-3 font-semibold text-red-800">Annuler la réservation<span class="sr-only"> : ${escapeHtml(batch.nature)}</span></button>
         </form>` : '<p class="mt-4">Créneau de retrait terminé.</p>'}
+        ${confirmPickupForm(session, batch, nameError)}
       </li>`)
     .join('');
-  const notice = cancelled
-    ? '<p role="status" class="mb-4 border-l-4 border-green-700 bg-green-50 p-3 text-green-900">Réservation annulée. Le lot est de nouveau disponible pour les associations.</p>'
-    : '';
+  let notice = '';
+  if (cancelled) {
+    notice = '<p role="status" class="mb-4 border-l-4 border-green-700 bg-green-50 p-3 text-green-900">Réservation annulée. Le lot est de nouveau disponible pour les associations.</p>';
+  }
+  if (collected) {
+    notice = '<p role="status" class="mb-4 border-l-4 border-green-700 bg-green-50 p-3 text-green-900">Collecte confirmée. Le commerce en est prévenu par e-mail.</p>';
+  }
+  // Résumé annoncé, avec un lien vers le champ en erreur.
+  if (nameError) {
+    notice = `<p role="alert" class="mb-4 border-l-4 border-red-700 bg-red-50 p-3 text-red-900">
+      <a href="#collected_by_name-${nameError}" class="underline">${COLLECTED_NAME_ERROR}</a></p>`;
+  }
   return page({
-    title: 'Mes réservations',
+    title: nameError ? 'Erreur – Mes réservations' : 'Mes réservations',
     content: `
     <h1 class="mb-6 text-2xl font-bold">Mes réservations</h1>
     ${notice}
@@ -166,6 +196,14 @@ export function reservationRefusedPage({ message, coldCapacityLink = false }) {
 export function cancellationRefusedPage({ message }) {
   return refusedPage({
     title: 'Annulation impossible',
+    message,
+    backLink: '<a href="/reservations" class="underline">Revenir à mes réservations</a>',
+  });
+}
+
+export function collectionRefusedPage({ message }) {
+  return refusedPage({
+    title: 'Confirmation impossible',
     message,
     backLink: '<a href="/reservations" class="underline">Revenir à mes réservations</a>',
   });

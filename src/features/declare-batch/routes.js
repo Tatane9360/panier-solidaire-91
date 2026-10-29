@@ -17,7 +17,8 @@ export function declareBatchRoutes({ db, clock }) {
               to_char(batch.expiry_date, 'YYYY-MM-DD') AS expiry_date, batch.date_type,
               to_char(batch.pickup_start AT TIME ZONE 'Europe/Paris', 'YYYY-MM-DD"T"HH24:MI') AS pickup_start,
               to_char(batch.pickup_end AT TIME ZONE 'Europe/Paris', 'YYYY-MM-DD"T"HH24:MI') AS pickup_end,
-              batch.cold_requirement, batch.status, reservation.reserved_by_name
+              batch.cold_requirement, batch.status, reservation.reserved_by_name, reservation.collected_by_name,
+              to_char(batch.collected_at AT TIME ZONE 'Europe/Paris', 'YYYY-MM-DD"T"HH24:MI') AS collected_at
        FROM batch
        LEFT JOIN reservation ON reservation.batch_id = batch.id AND reservation.cancelled_at IS NULL
        WHERE batch.store_id = $1
