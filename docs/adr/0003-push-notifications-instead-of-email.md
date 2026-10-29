@@ -1,0 +1,12 @@
+# Notifications push plutôt qu'e-mails, sauf pour la décision d'inscription
+
+La spec excluait les notifications push. Décision du 29/10/2026 (tickets #10 et #11) : les alertes passent par le **Web Push** de la PWA. L'e-mail ne sert plus qu'à la décision de la Coordination sur une inscription, parce que le demandeur ne peut pas encore se connecter, donc pas abonner d'appareil. Raison : une alerte « Nouveau lot disponible » doit faire réagir vite, et la quasi-totalité des appareils la reçoivent. D'après Statcounter (via [iosref.com](https://iosref.com/ios-usage), données mondiales du 12/10/2026), 97,8 % des appareils iOS sont sur iOS 16 ou plus récent, et au plus 4,8 % sont sous iOS 16.4, la version minimale pour le Web Push. Android a le Web Push depuis Android 10 avec Chrome.
+
+## Conséquences
+
+- **iOS 15 reste pris en charge pour tous les écrans**, mais pas pour les notifications. Sur iPhone, il faut iOS 16.4 ou plus récent, avec l'application ajoutée à l'écran d'accueil. Sans push possible, l'encadré « Notifications » de l'accueil reste masqué, ou explique comment installer l'application. Ces appareils ne reçoivent plus d'alerte : ils consultent « Lots disponibles » ou « Mes lots ».
+- **Un abonnement par appareil** (table `push_subscription`), pas par compte : un compte d'association est partagé entre plusieurs personnes. La préférence par compte `notify_new_batches` est supprimée : pour ne plus recevoir l'alerte, on désactive les notifications de l'appareil.
+- **Les navigateurs exigent un clic de l'utilisateur** pour autoriser les notifications : aucune ne peut être activée sans son accord. L'accueil le propose tant que l'appareil n'est pas abonné.
+- **Services externes** : les notifications transitent par le service de push du navigateur (Google, Apple, Mozilla, Microsoft), hors de l'hébergement UE exigé pour les données. Leur contenu est chiffré pour l'appareil (RFC 8291), et ces services ne peuvent pas le lire. Le serveur n'envoie qu'aux adresses de ces services (liste fermée), pour qu'un abonnement forgé ne lui fasse pas appeler un autre serveur.
+- **Dépendance `web-push`** : la signature VAPID et le chiffrement aes128gcm à la main dépasseraient une centaine de lignes de cryptographie, difficiles à défendre ligne à ligne. Clés VAPID dans les variables d'environnement, jamais dans le dépôt.
+- **Pour revenir à l'e-mail**, ou ajouter un canal, il suffit de modifier `src/shared/notifications/`, sans toucher aux règles métier.

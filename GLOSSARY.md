@@ -26,6 +26,14 @@ Personne d'une association qui vient retirer un lot. Il n'a pas de compte : seul
 **Territoire** (`territory`) :
 Zone géographique à laquelle chaque compte est rattaché. Il n'en existe qu'un pour l'instant, le territoire pilote.
 
+**Notification** :
+Message push envoyé aux appareils abonnés d'un compte (nouveau lot disponible, lot collecté). Seule la décision sur une inscription part par e-mail.
+_Éviter_ : alerte e-mail, notif
+
+**Appareil abonné** (`push_subscription`) :
+Navigateur d'un téléphone ou d'un ordinateur sur lequel quelqu'un a activé les notifications d'un compte. Un compte partagé peut en avoir plusieurs.
+_Éviter_ : abonné, inscrit
+
 **Planificateur** :
 Tâche horaire du serveur, sans utilisateur, qui fait expirer les lots.
 

@@ -20,8 +20,8 @@
 
 - **Un seul point d'entrée** : l'application construite par sa fonction de construction (voir [architecture.md](architecture.md#construction-de-lapplication)), démarrée sur un port libre et appelée par de vraies requêtes HTTP (connexion, jeton CSRF, formulaires).
 - **Vraie base PostgreSQL de test**, remise à zéro entre les tests. Pas de mock de la base.
-- On vérifie ce qui se voit de l'extérieur : réponse (page, 401/403, redirection), état en base, e-mails envoyés.
-- **E-mails** : transport en mémoire de `src/shared/notifications/` ; on vérifie destinataire et objet.
+- On vérifie ce qui se voit de l'extérieur : réponse (page, 401/403, redirection), état en base, notifications et e-mails envoyés.
+- **Notifications** : transports en mémoire de `src/shared/notifications/`. E-mail : on vérifie destinataire et objet. Push : on vérifie l'appareil (`endpoint`), le titre et la page ouverte ; `env.subscribeDevice(accountId)` abonne un appareil fictif, `env.pushes.gone` simule un abonnement disparu, `failing` une panne.
 - **Horloge** : contrôlée par le test, pour la fin de session, le créneau dépassé, la fenêtre de 24 h, l'expiration et le blocage après échecs.
 - **Exception** : la tâche du planificateur est appelée directement avec la base et l'horloge de test ; son effet est vérifié ensuite par HTTP.
 - Pas de tests unitaires des requêtes SQL ni des fonctions internes : ils cassent à chaque refactorisation sans protéger de règle.
@@ -46,3 +46,4 @@ Une fonctionnalité est terminée quand :
 
 - Déclaration d'un lot : test chronométré sur smartphone (< 1 minute, ≤ 3 actions de navigation).
 - Vérification sur iPhone iOS 15 ou Android 10 avec Chrome à jour (voir [accessibility-mobile.md](accessibility-mobile.md)).
+- Notifications push : sur Android avec Chrome et sur iPhone iOS 16.4 ou plus récent (application ajoutée à l'écran d'accueil), activer les notifications depuis l'accueil, déclarer un lot compatible depuis un autre compte, vérifier la notification puis la page ouverte en la touchant ; vérifier sur iOS 15 que l'accueil fonctionne sans encadré « Notifications ». Le script du navigateur (`public/notifications.js`, `public/sw.js`) ne peut pas être testé par `node:test`.
