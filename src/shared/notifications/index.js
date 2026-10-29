@@ -96,7 +96,7 @@ export function createWebPushTransport({ publicKey, privateKey, subject }) {
   }
   const options = {
     vapidDetails: { subject, publicKey, privateKey },
-    // Une alerte de plus d'un jour n'a plus d'intérêt : le service de push l'abandonne.
+    // Une notification de plus d'un jour n'a plus d'intérêt : le service de push l'abandonne.
     TTL: 24 * 60 * 60,
   };
   return {

@@ -91,18 +91,18 @@ export function declareBatchRoutes({ db, notifications, clock }) {
         clock.now(),
       ],
     );
-    // Rien d'inséré : ce formulaire avait déjà servi, on le dit au commerce, sans nouvelle alerte.
-    // Le lot est enregistré : une panne pendant l'alerte ne doit pas faire croire l'inverse au commerce.
+    // Rien d'inséré : ce formulaire avait déjà servi, on le dit au commerce, sans nouvelle notification.
+    // Le lot est enregistré : une panne pendant la notification ne doit pas faire croire l'inverse au commerce.
     if (rowCount === 1) {
-      await alertAssociations(values, req.session.account.id)
-        .catch((error) => console.error('Alerte « Nouveau lot disponible » :', error));
+      await notifyAssociations(values, req.session.account.id)
+        .catch((error) => console.error('Notification « Nouveau lot disponible » :', error));
     }
     res.redirect(303, rowCount === 1 ? '/batches?declared=1' : '/batches?duplicate=1');
   });
 
   // Associations actives qui savent garder le lot au bon niveau de froid ;
   // chacune est prévenue sur ses appareils abonnés.
-  async function alertAssociations(values, storeId) {
+  async function notifyAssociations(values, storeId) {
     const { rows } = await db.query(
       `SELECT id FROM account
        WHERE role = 'ASSOCIATION' AND status = 'ACTIVE' AND $1 = ANY (cold_capacity)`,
