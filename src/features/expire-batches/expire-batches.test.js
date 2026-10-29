@@ -60,6 +60,8 @@ test('batches expire only once the pickup slot has ended, other statuses are lef
   for (const status of ['COLLECTED', 'CANCELLED']) {
     assert.deepEqual(await batchRow(ids[status]), { status, expired_at: null }, status);
   }
+  const storePage = await (await loggedIn(store)).get('/batches');
+  assert.equal(storePage.body.match(/Statut : <strong>Expiré<\/strong>/g).length, 2);
 
   // Un passage suivant ne réécrit pas expired_at.
   env.clock.advanceMinutes(60);

@@ -17,7 +17,9 @@ app.listen(config.port, () => {
   console.log(`Panier Solidaire 91 : http://localhost:${config.port}`);
 });
 
-// Planificateur : toutes les heures, avec la même base et la même horloge que l'application.
-setInterval(() => {
+// Planificateur : au démarrage puis toutes les heures, avec la même base et la même horloge que l'application.
+function runScheduler() {
   expireBatches({ db, clock: systemClock }).catch((error) => console.error('Planificateur :', error));
-}, 60 * 60_000);
+}
+runScheduler();
+setInterval(runScheduler, 60 * 60_000);
