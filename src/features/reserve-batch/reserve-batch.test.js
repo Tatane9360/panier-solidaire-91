@@ -332,3 +332,11 @@ test('my reservations without a session redirects to the login page', async () =
   assert.equal(status, 303);
   assert.equal(location, '/login');
 });
+
+test('an empty volunteer name on a batch that cannot be reserved gets the refusal, not the name error', async () => {
+  const { batchId, client } = await setup({ status: 'RESERVED' });
+  const { status, body } = await client.post(`/batches/${batchId}/reserve`, { reserved_by_name: ' ' });
+  assert.equal(status, 409);
+  assert.match(body, /Lot déjà réservé/);
+  assert.equal((await client.post('/batches/999999/reserve', { reserved_by_name: ' ' })).status, 404);
+});

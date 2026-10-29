@@ -20,6 +20,13 @@ class BatchActionRefused extends Error {
   }
 }
 
+// Prénom du bénévole manquant. Levée après les contrôles d'accès et d'état du lot :
+// une association qui n'a pas le droit d'agir sur ce lot reçoit d'abord ce refus-là.
+class MissingVolunteerName extends Error {}
+
+// Fenêtre de confirmation de la collecte après la fin du créneau.
+const PICKUP_CONFIRMATION_WINDOW_HOURS = 24;
+
 // Consulter les lots disponibles, les réserver, annuler sa réservation
 // et déclarer sa capacité de froid (association).
 export function reserveBatchRoutes({ db, notifications, clock }) {
@@ -72,11 +79,6 @@ export function reserveBatchRoutes({ db, notifications, clock }) {
     if (!isBatchId(req.params.id)) {
       return res.status(404).send(reservationRefusedPage({ message: NOT_FOUND }));
     }
-    // La liste est réaffichée, l'erreur reliée au champ du lot concerné.
-    if (!reservedByName) {
-      return sendAvailableBatches(req, res, { status: 400, nameError: Number(req.params.id) });
-    }
-
     const now = clock.now();
     try {
       await db.withTransaction(async (client) => {
@@ -101,6 +103,7 @@ export function reserveBatchRoutes({ db, notifications, clock }) {
             true,
           );
         }
+        if (!reservedByName) throw new MissingVolunteerName();
 
         await client.query(
           `INSERT INTO reservation (batch_id, association_id, reserved_at, reserved_by_name)
@@ -110,6 +113,10 @@ export function reserveBatchRoutes({ db, notifications, clock }) {
         await client.query("UPDATE batch SET status = 'RESERVED' WHERE id = $1", [req.params.id]);
       });
     } catch (error) {
+      // La liste est réaffichée, l'erreur reliée au champ du lot concerné.
+      if (error instanceof MissingVolunteerName) {
+        return sendAvailableBatches(req, res, { status: 400, nameError: Number(req.params.id) });
+      }
       if (!(error instanceof BatchActionRefused)) throw error;
       return res.status(error.status).send(reservationRefusedPage(error));
     }
@@ -132,9 +139,9 @@ export function reserveBatchRoutes({ db, notifications, clock }) {
        JOIN account AS store ON store.id = batch.store_id
        WHERE reservation.association_id = $1 AND reservation.cancelled_at IS NULL
          AND batch.status IN ('RESERVED', 'EXPIRED')
-         AND batch.pickup_end + interval '24 hours' > $2
+         AND batch.pickup_end + make_interval(hours => $3) > $2
        ORDER BY batch.pickup_end, batch.id`,
-      [req.session.account.id, clock.now()],
+      [req.session.account.id, clock.now(), PICKUP_CONFIRMATION_WINDOW_HOURS],
     );
     res.status(status).send(reservationsPage({
       session: req.session,
@@ -155,10 +162,6 @@ export function reserveBatchRoutes({ db, notifications, clock }) {
     if (!isBatchId(req.params.id)) {
       return res.status(404).send(collectionRefusedPage({ message: NOT_FOUND }));
     }
-    if (!collectedByName) {
-      return sendReservations(req, res, { status: 400, nameError: Number(req.params.id) });
-    }
-
     const now = clock.now();
     let collected;
     try {
@@ -184,12 +187,14 @@ export function reserveBatchRoutes({ db, notifications, clock }) {
           throw new BatchActionRefused(409, 'Ce lot n’est plus réservé : sa collecte ne peut pas être confirmée.');
         }
         // Fenêtre close dès que l'horloge atteint pickup_end + 24 h, comme le créneau à pickup_end.
-        if (now.getTime() >= batch.pickup_end.getTime() + 24 * 60 * 60_000) {
+        const windowEnd = batch.pickup_end.getTime() + PICKUP_CONFIRMATION_WINDOW_HOURS * 60 * 60_000;
+        if (now.getTime() >= windowEnd) {
           throw new BatchActionRefused(
             409,
             'Le créneau de retrait de ce lot est terminé depuis plus de 24 h : contactez la Coordination pour enregistrer la collecte.',
           );
         }
+        if (!collectedByName) throw new MissingVolunteerName();
 
         await client.query(
           'UPDATE reservation SET collected_by_name = $1 WHERE batch_id = $2 AND cancelled_at IS NULL',
@@ -199,6 +204,10 @@ export function reserveBatchRoutes({ db, notifications, clock }) {
         return batch;
       });
     } catch (error) {
+      // La liste est réaffichée, l'erreur reliée au champ du lot concerné.
+      if (error instanceof MissingVolunteerName) {
+        return sendReservations(req, res, { status: 400, nameError: Number(req.params.id) });
+      }
       if (!(error instanceof BatchActionRefused)) throw error;
       return res.status(error.status).send(collectionRefusedPage(error));
     }

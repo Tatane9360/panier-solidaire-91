@@ -141,6 +141,8 @@ test('only the reserving association, on a batch with an active reservation', as
   const other = await loggedIn(await env.createAccount({ role: 'ASSOCIATION' }));
   await other.get('/cold-capacity');
   assert.equal((await other.post(`/batches/${batchId}/confirm-pickup`, { collected_by_name: 'Inès' })).status, 403);
+  // Prénom vide en plus : le refus d'accès passe avant l'erreur de saisie.
+  assert.equal((await other.post(`/batches/${batchId}/confirm-pickup`, { collected_by_name: ' ' })).status, 403);
 
   // Réservation annulée puis lot expiré : jamais COLLECTED.
   await env.db.query('UPDATE reservation SET cancelled_at = $1, cancelled_by = $2', [env.clock.now(), association.id]);
