@@ -1,9 +1,9 @@
 import { Router } from 'express';
 import { requireRole } from '../../shared/access.js';
-import { COLD_LABELS } from '../../shared/html.js';
+import { COLD_LABELS, formatLocal } from '../../shared/html.js';
 import { releaseReservation } from '../../shared/reservations.js';
 import {
-  availableBatchesPage, coldCapacityPage, reservationRefusedPage, reservationsPage, cancellationRefusedPage,
+  availableBatchesPage, coldCapacityPage, reservationRefusedPage, reservationsPage, cancellationRefusedPage, collectionRefusedPage,
 } from './pages.js';
 
 const NOT_FOUND = 'Lot introuvable.';
@@ -22,7 +22,7 @@ class BatchActionRefused extends Error {
 
 // Consulter les lots disponibles, les réserver, annuler sa réservation
 // et déclarer sa capacité de froid (association).
-export function reserveBatchRoutes({ db, clock }) {
+export function reserveBatchRoutes({ db, notifications, clock }) {
   const router = Router();
   const associationOnly = requireRole('ASSOCIATION');
 
@@ -116,24 +116,98 @@ export function reserveBatchRoutes({ db, clock }) {
     res.redirect(303, '/available-batches?reserved=1');
   });
 
-  // Mes réservations : réservations actives de l'association sur des lots RESERVED.
+  // Mes réservations : réservations actives de l'association dont la collecte reste confirmable,
+  // c'est-à-dire sur un lot RESERVED, ou EXPIRED depuis moins de 24 h après la fin du créneau.
   // Créneau terminé : le lot reste affiché, sans bouton d'annulation.
-  router.get('/reservations', associationOnly, async (req, res) => {
+  // `nameError` : identifiant du lot dont le prénom du bénévole manquait.
+  async function sendReservations(req, res, { status = 200, nameError = null } = {}) {
     const { rows } = await db.query(
       `SELECT batch.id, batch.nature, batch.quantity, batch.quantity_unit, batch.weight_kg,
               to_char(batch.pickup_start AT TIME ZONE 'Europe/Paris', 'YYYY-MM-DD"T"HH24:MI') AS pickup_start,
               to_char(batch.pickup_end AT TIME ZONE 'Europe/Paris', 'YYYY-MM-DD"T"HH24:MI') AS pickup_end,
               reservation.reserved_by_name, store.organization_name, store.address,
-              batch.pickup_end > $2 AS cancellable
+              batch.status = 'RESERVED' AND batch.pickup_end > $2 AS cancellable
        FROM reservation
        JOIN batch ON batch.id = reservation.batch_id
        JOIN account AS store ON store.id = batch.store_id
        WHERE reservation.association_id = $1 AND reservation.cancelled_at IS NULL
-         AND batch.status = 'RESERVED'
+         AND batch.status IN ('RESERVED', 'EXPIRED')
+         AND batch.pickup_end + interval '24 hours' > $2
        ORDER BY batch.pickup_end, batch.id`,
       [req.session.account.id, clock.now()],
     );
-    res.send(reservationsPage({ session: req.session, batches: rows, cancelled: req.query.cancelled === '1' }));
+    res.status(status).send(reservationsPage({
+      session: req.session,
+      batches: rows,
+      cancelled: req.query.cancelled === '1',
+      collected: req.query.collected === '1',
+      nameError,
+    }));
+  }
+
+  router.get('/reservations', associationOnly, (req, res) => sendReservations(req, res));
+
+  // Confirmer la collecte : même verrou FOR UPDATE que la réservation et l'annulation.
+  // Un lot EXPIRED garde son expired_at. L'e-mail part après le COMMIT : un second envoi
+  // du formulaire trouve le lot COLLECTED et est refusé, d'où un seul e-mail par collecte.
+  router.post('/batches/:id/confirm-pickup', associationOnly, async (req, res) => {
+    const collectedByName = String(req.body.collected_by_name ?? '').trim();
+    if (!isBatchId(req.params.id)) {
+      return res.status(404).send(collectionRefusedPage({ message: NOT_FOUND }));
+    }
+    if (!collectedByName) {
+      return sendReservations(req, res, { status: 400, nameError: Number(req.params.id) });
+    }
+
+    const now = clock.now();
+    let collected;
+    try {
+      collected = await db.withTransaction(async (client) => {
+        const { rows: [batch] } = await client.query(
+          `SELECT batch.status, batch.pickup_end, batch.nature, reservation.association_id, store.email,
+                  to_char($2::timestamptz AT TIME ZONE 'Europe/Paris', 'YYYY-MM-DD"T"HH24:MI') AS collected_at
+           FROM batch
+           JOIN account AS store ON store.id = batch.store_id
+           LEFT JOIN reservation ON reservation.batch_id = batch.id AND reservation.cancelled_at IS NULL
+           WHERE batch.id = $1
+           FOR UPDATE OF batch`,
+          [req.params.id, now],
+        );
+        if (!batch) throw new BatchActionRefused(404, NOT_FOUND);
+        // Sans réservation active, l'association n'est pas réservataire : un lot expiré
+        // sans réservation ne devient donc jamais COLLECTED.
+        if (batch.association_id !== req.session.account.id) {
+          throw new BatchActionRefused(403, 'Seule l’association qui a réservé ce lot peut confirmer sa collecte.');
+        }
+        if (batch.status === 'COLLECTED') throw new BatchActionRefused(409, 'La collecte de ce lot est déjà confirmée.');
+        if (!['RESERVED', 'EXPIRED'].includes(batch.status)) {
+          throw new BatchActionRefused(409, 'Ce lot n’est plus réservé : sa collecte ne peut pas être confirmée.');
+        }
+        // Fenêtre close dès que l'horloge atteint pickup_end + 24 h, comme le créneau à pickup_end.
+        if (now.getTime() >= batch.pickup_end.getTime() + 24 * 60 * 60_000) {
+          throw new BatchActionRefused(
+            409,
+            'Le créneau de retrait de ce lot est terminé depuis plus de 24 h : contactez la Coordination pour enregistrer la collecte.',
+          );
+        }
+
+        await client.query(
+          'UPDATE reservation SET collected_by_name = $1 WHERE batch_id = $2 AND cancelled_at IS NULL',
+          [collectedByName, req.params.id],
+        );
+        await client.query("UPDATE batch SET status = 'COLLECTED', collected_at = $1 WHERE id = $2", [now, req.params.id]);
+        return batch;
+      });
+    } catch (error) {
+      if (!(error instanceof BatchActionRefused)) throw error;
+      return res.status(error.status).send(collectionRefusedPage(error));
+    }
+    await notifications.batchCollected({
+      email: collected.email,
+      nature: collected.nature,
+      collectedAt: formatLocal(collected.collected_at),
+    });
+    res.redirect(303, '/reservations?collected=1');
   });
 
   // Annuler sa réservation : le verrou FOR UPDATE sur le lot sérialise l'annulation

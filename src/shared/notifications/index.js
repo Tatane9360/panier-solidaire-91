@@ -23,7 +23,16 @@ export function createNotifications({ transport, from }) {
     });
   }
 
-  return { send, registrationDecided };
+  // Collecte confirmée, envoyée au commerce. `collectedAt` : date déjà formatée en heure de Paris.
+  function batchCollected({ email, nature, collectedAt }) {
+    return send({
+      to: email,
+      subject: 'Votre lot a été collecté',
+      text: `Bonjour,\n\nVotre lot « ${nature} » a été collecté le ${collectedAt}.\nMerci pour votre don !\n\nLa Coordination du Panier Solidaire 91`,
+    });
+  }
+
+  return { send, registrationDecided, batchCollected };
 }
 
 export function createSmtpTransport({ host, port, user, password }) {

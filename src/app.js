@@ -18,6 +18,6 @@ export function buildApp({ db, notifications, clock, config }) {
   app.use(protectActions({ publicActions: ['/login', '/register'] }));
   app.use(accountsRoutes({ db, notifications, clock }));
   app.use(declareBatchRoutes({ db, clock }));
-  app.use(reserveBatchRoutes({ db, clock }));
+  app.use(reserveBatchRoutes({ db, notifications, clock }));
   return app;
 }
