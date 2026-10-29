@@ -81,11 +81,12 @@ export function coldCapacityPage({ session, coldCapacity, notifyNewBatches, save
         </div>`;
     })
     .join('');
-  const notice = saved
-    ? '<p role="status" class="mb-4 border-l-4 border-green-700 bg-green-50 p-3 text-green-900">Capacité de froid enregistrée.</p>'
-    : alertsSaved
-      ? '<p role="status" class="mb-4 border-l-4 border-green-700 bg-green-50 p-3 text-green-900">Préférence d’alerte enregistrée.</p>'
-      : '';
+  let savedMessage = '';
+  if (saved) savedMessage = 'Capacité de froid enregistrée.';
+  if (alertsSaved) savedMessage = 'Préférence d’alerte enregistrée.';
+  const notice = savedMessage
+    ? `<p role="status" class="mb-4 border-l-4 border-green-700 bg-green-50 p-3 text-green-900">${savedMessage}</p>`
+    : '';
   const alert = error
     ? `<p id="erreur-cold_capacity" role="alert" class="mb-4 border-l-4 border-red-700 bg-red-50 p-3 text-red-900">${escapeHtml(error)}</p>`
     : '';

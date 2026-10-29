@@ -92,7 +92,11 @@ export function declareBatchRoutes({ db, notifications, clock }) {
       ],
     );
     // Rien d'inséré : ce formulaire avait déjà servi, on le dit au commerce, sans nouvelle alerte.
-    if (rowCount === 1) await alertAssociations(values, req.session.account.id);
+    // Le lot est enregistré : une panne pendant l'alerte ne doit pas faire croire l'inverse au commerce.
+    if (rowCount === 1) {
+      await alertAssociations(values, req.session.account.id)
+        .catch((error) => console.error('Alerte « Nouveau lot disponible » :', error));
+    }
     res.redirect(303, rowCount === 1 ? '/batches?declared=1' : '/batches?duplicate=1');
   });
 
