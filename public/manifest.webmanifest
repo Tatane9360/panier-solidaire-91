@@ -1,0 +1,9 @@
+{
+  "name": "Panier Solidaire 91",
+  "short_name": "Panier 91",
+  "lang": "fr",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#166534"
+}

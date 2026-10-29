@@ -12,5 +12,10 @@ export function readConfig(env) {
       user: env.SMTP_USER,
       password: env.SMTP_PASSWORD,
     },
+    vapid: {
+      publicKey: env.VAPID_PUBLIC_KEY,
+      privateKey: env.VAPID_PRIVATE_KEY,
+      subject: env.VAPID_SUBJECT,
+    },
   };
 }

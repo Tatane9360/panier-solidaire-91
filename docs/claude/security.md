@@ -18,6 +18,7 @@
 ## Injection
 
 - Requêtes SQL **paramétrées** uniquement.
+- Abonnement aux notifications : le serveur envoie une requête à l'adresse (`endpoint`) fournie par le navigateur. Seuls les services de push connus sont acceptés (`fcm.googleapis.com`, `updates.push.services.mozilla.com`, `web.push.apple.com`, `*.push.apple.com`, `*.notify.windows.com`), en HTTPS, sinon **400** : un abonnement forgé ne peut pas faire appeler un autre serveur.
 - HTML rendu côté serveur : échapper toute donnée utilisateur à l'affichage.
 
 ## Dépendances
@@ -28,7 +29,7 @@
 ## Dépôt
 
 - Le dépôt GitHub est **public**. N'y mettre **ni mot de passe, ni clé, ni donnée personnelle**.
-- Configuration sensible dans des variables d'environnement hors dépôt, avec un fichier d'exemple sans secret.
+- Configuration sensible dans des variables d'environnement hors dépôt, avec un fichier d'exemple sans secret. La clé privée VAPID (`VAPID_PRIVATE_KEY`) en fait partie : une paire par installation, générée par `pnpm exec web-push generate-vapid-keys`.
 - Données de démonstration **fictives** uniquement.
 
 ## RGPD
@@ -36,8 +37,9 @@
 - **Minimisation** : ne collecter que les champs prévus. Pas de compte de bénévole, seulement leur prénom (`reserved_by_name`, `collected_by_name`).
 - Échanges chiffrés en TLS 1.2 ou 1.3.
 - Hébergement des données (base, sauvegardes, service d'e-mail) **en France ou dans l'Union européenne** (exigence du commanditaire, voir [context.md](context.md#contraintes-brief--23)).
+- Notifications push : elles transitent par le service de push du navigateur (Google, Apple, Mozilla, Microsoft), hors de cet hébergement. Leur contenu est chiffré pour l'appareil (RFC 8291) : ces services voient passer un message illisible et l'adresse de l'appareil, pas son contenu. Aucune notification n'est envoyée sans l'autorisation donnée par l'utilisateur dans son navigateur. Pas de publicité : uniquement des alertes de service ([ADR 0003](../adr/0003-push-notifications-instead-of-email.md)).
 - Droits d'accès et de suppression traités **manuellement** par la Coordination, sur demande par e-mail (aucune fonctionnalité dans l'application) :
-  - accès : requêtes SQL documentées dans le README (compte, lots, réservations) ;
+  - accès : requêtes SQL documentées dans le README (compte, lots, réservations, appareils abonnés) ;
   - suppression : script d'anonymisation documenté dans le README (voir [data-model.md](data-model.md#anonymisation)).
 
 ## Traçabilité

@@ -28,12 +28,42 @@ export function loginPage({ session, error = '', email = '' }) {
   });
 }
 
-export function homePage({ session }) {
+// Encadré des notifications push. Le serveur l'envoie masqué : public/notifications.js
+// l'affiche selon ce que permet l'appareil (abonné, à abonner, à installer d'abord sur iPhone, refusé).
+const NOTIFICATIONS_PURPOSE = {
+  STORE: 'pour savoir dès qu’un de vos lots est collecté',
+  ASSOCIATION: 'pour être prévenu dès qu’un nouveau lot compatible avec votre capacité de froid est disponible',
+};
+
+function notificationsBox(role, vapidPublicKey) {
+  return `
+    <section id="notifications" data-vapid-public-key="${escapeHtml(vapidPublicKey)}" hidden
+      aria-labelledby="notifications-titre" class="mb-6 border-l-4 border-green-800 bg-green-50 p-4">
+      <h2 id="notifications-titre" class="mb-2 text-lg font-bold">Notifications</h2>
+      <div data-state="off" hidden>
+        <p class="mb-3">Activez les notifications sur cet appareil ${NOTIFICATIONS_PURPOSE[role]}.</p>
+        <button type="button" data-action="subscribe" class="w-full rounded bg-green-800 px-4 py-3 font-semibold text-white">Activer les notifications</button>
+      </div>
+      <div data-state="on" hidden>
+        <p class="mb-3">Les notifications sont activées sur cet appareil.</p>
+        <button type="button" data-action="unsubscribe" class="w-full rounded border border-slate-700 px-4 py-3">Désactiver les notifications sur cet appareil</button>
+      </div>
+      <p data-state="install" hidden>Sur iPhone et iPad (iOS 16.4 ou plus récent), ajoutez d’abord l’application à l’écran d’accueil :
+        bouton Partager de Safari, puis « Sur l’écran d’accueil ». Ouvrez-la ensuite depuis l’écran d’accueil pour activer les notifications.</p>
+      <p data-state="denied" hidden>Les notifications sont bloquées pour ce site. Pour les recevoir, autorisez-les dans les réglages de votre navigateur.</p>
+      <p data-state="error" hidden>L’activation des notifications a échoué. Réessayez plus tard.</p>
+      <p role="status" data-status class="mt-2"></p>
+    </section>
+    <script src="/notifications.js" defer></script>`;
+}
+
+export function homePage({ session, vapidPublicKey }) {
   return page({
     title: 'Accueil',
     content: `
     <h1 class="mb-6 text-2xl font-bold">Accueil</h1>
     <p class="mb-6">Connecté en tant que ${escapeHtml(session.account.organization_name)}.</p>
+    ${session.account.role === 'COORDINATOR' ? '' : notificationsBox(session.account.role, vapidPublicKey)}
     ${session.account.role === 'COORDINATOR' ? '<p class="mb-6"><a href="/registrations" class="underline">Inscriptions en attente</a></p>' : ''}
     ${session.account.role === 'STORE' ? `
     <p class="mb-4"><a href="/batches/new" class="inline-block w-full rounded bg-green-800 px-4 py-3 text-center font-semibold text-white">Déclarer un lot</a></p>

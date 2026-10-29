@@ -151,7 +151,7 @@ export function reservationsPage({ session, batches, cancelled = false, collecte
     notice = '<p role="status" class="mb-4 border-l-4 border-green-700 bg-green-50 p-3 text-green-900">Réservation annulée. Le lot est de nouveau disponible pour les associations.</p>';
   }
   if (collected) {
-    notice = '<p role="status" class="mb-4 border-l-4 border-green-700 bg-green-50 p-3 text-green-900">Collecte confirmée. Le commerce en est prévenu par e-mail.</p>';
+    notice = '<p role="status" class="mb-4 border-l-4 border-green-700 bg-green-50 p-3 text-green-900">Collecte confirmée. Le commerce en est prévenu.</p>';
   }
   // Résumé annoncé, avec un lien vers le champ en erreur.
   if (nameError) {

@@ -5,12 +5,12 @@ Plateforme de gestion des dons alimentaires du **Panier Solidaire 91** (associat
 ## Règles non négociables
 
 1. **Stack** : Node.js 26 + Express, HTML rendu côté serveur, Tailwind CSS **v3.4**, PostgreSQL via `pg` **sans ORM**, tests `node:test`, modules ESM. Pas de SPA, pas de DSFR, pas de dépendance non justifiée. → [architecture](docs/claude/architecture.md)
-2. **Structure** : `src/features/<feature>/` (routes, SQL, pages, tests) ; **aucun import entre features** ; partagé dans `src/shared/` ; e-mails **uniquement** via `src/shared/notifications/`. → [architecture](docs/claude/architecture.md#organisation-du-code-package-by-feature)
-3. **Noms et langues** : code, base, commits, branches en **anglais** ; pages, messages et e-mails en **français** ; identifiants **exactement** ceux du [glossaire](GLOSSARY.md) ; `camelCase` en JS, `snake_case` en base, statuts en `MAJUSCULES`. → [conventions](docs/claude/conventions.md)
+2. **Structure** : `src/features/<feature>/` (routes, SQL, pages, tests) ; **aucun import entre features** ; partagé dans `src/shared/` ; notifications push et e-mails **uniquement** via `src/shared/notifications/`. → [architecture](docs/claude/architecture.md#organisation-du-code-package-by-feature)
+3. **Noms et langues** : code, base, commits, branches en **anglais** ; pages, messages, notifications et e-mails en **français** ; identifiants **exactement** ceux du [glossaire](GLOSSARY.md) ; `camelCase` en JS, `snake_case` en base, statuts en `MAJUSCULES`. → [conventions](docs/claude/conventions.md)
 4. **Cycle de vie d'un lot** : seules les transitions listées sont permises ; réservation par `SELECT … FOR UPDATE` + index unique partiel ; froid incompatible = refus **bloquant**. Dates en `timestamptz` ; année, trimestre et période calculés en `Europe/Paris`. → [règles métier](docs/claude/business-rules.md#cycle-de-vie-dun-lot), [données](docs/claude/data-model.md#dates-et-heures)
 5. **Sécurité** : SQL paramétré, mots de passe hachés (scrypt), contrôle d'accès par profil sur chaque route (401/403), cloisonnement par compte, CSRF. **Dépôt public : aucun secret ni donnée réelle.** → [sécurité](docs/claude/security.md)
-6. **Tests** : chaque règle métier testée **par HTTP** sur un vrai PostgreSQL, e-mails en mémoire et **horloge injectée** (jamais `Date.now()` ni `now()` SQL dans une règle) ; réservation concurrente testée ; tests verts avant fusion. → [tests et qualité](docs/claude/testing-quality.md)
-7. **Accessibilité et mobile** : RGAA 4.1.2 sur les parcours principaux ; fonctionne sur iOS 15 / Android 10 ; déclaration d'un lot en ≤ 3 actions. → [accessibilité](docs/claude/accessibility-mobile.md)
+6. **Tests** : chaque règle métier testée **par HTTP** sur un vrai PostgreSQL, notifications et e-mails en mémoire et **horloge injectée** (jamais `Date.now()` ni `now()` SQL dans une règle) ; réservation concurrente testée ; tests verts avant fusion. → [tests et qualité](docs/claude/testing-quality.md)
+7. **Accessibilité et mobile** : RGAA 4.1.2 sur les parcours principaux ; fonctionne sur iOS 15 / Android 10 (notifications push : iOS 16.4+, [ADR 0003](docs/adr/0003-push-notifications-instead-of-email.md)) ; déclaration d'un lot en ≤ 3 actions. → [accessibilité](docs/claude/accessibility-mobile.md)
 8. **Git** : PR uniquement vers `main`, Conventional Commits, branche `<numéro du ticket>-<feature>` (`7-reserve-batch`). **Après l'étiquette `remise` : plus aucun commit, réécriture ou déplacement d'étiquette.** → [workflow](docs/claude/workflow.md)
 9. **Code explicable ligne à ligne** : simple plutôt qu'astucieux (revue de code à l'oral).
 10. **Ne pas inventer de règle** : si la documentation est muette, demander à l'utilisateur, puis consigner la décision dans [business-rules.md](docs/claude/business-rules.md), ou dans un ADR (`docs/adr/`) si elle est difficile à défaire.
@@ -26,6 +26,7 @@ Gestionnaire de paquets : **pnpm** (jamais npm). Copier `.env.example` en `.env`
 | Installer la base (tables, Territoire pilote, premier `COORDINATOR`) | `pnpm run install:db` |
 | Appliquer les migrations seules | `pnpm run migrate` |
 | Compiler le CSS Tailwind | `pnpm run build:css` |
+| Générer les clés VAPID des notifications push (à copier dans `.env`) | `pnpm exec web-push generate-vapid-keys` |
 | Lancer l'application | `pnpm start` |
 | Préparer la base de test | créer la base de `TEST_DATABASE_URL` ; les tests appliquent les migrations et la vident eux-mêmes |
 | Lancer les tests | `pnpm test` (un fichier : `node --env-file=.env --test <fichier>`) |

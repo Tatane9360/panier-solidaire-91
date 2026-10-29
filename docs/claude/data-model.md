@@ -13,13 +13,14 @@
 - `email`* unique, toujours en minuscules (contrainte `CHECK`), `password_hash` (nullable, vidé à l'anonymisation)
 - `organization_name`*, `address`*
 - `cold_capacity` text[] (association) ⊆ {`AMBIENT`, `CHILLED`, `FROZEN`}, défaut `{AMBIENT}`
-- `notify_new_batches` boolean (association), défaut vrai
 - `decided_by` FK, `decided_at`, `refusal_reason` (décision sur l'inscription)
 - `created_at`*
 
 **`session`** : `sid` PK, `account_id` FK (nul pour une session anonyme), `csrf_token`*, `expires_at`*. Une session anonyme porte le jeton CSRF des formulaires affichés avant la connexion ; la connexion la remplace par une session au nouveau `sid`.
 
 **`login_failure`** (échecs de connexion) : `id` PK, `email`* (tel que saisi, en minuscules, que le compte existe ou non), `failed_at`*, `starts_block`* (vrai pour le 5e échec en 15 min, qui ouvre un blocage de 15 min). Lignes supprimées pour un e-mail à sa connexion réussie, et par la tâche horaire au-delà de 15 min.
+
+**`push_subscription`** (appareil abonné aux notifications push) : `id` PK, `account_id`* FK, `endpoint`* unique (adresse fournie par le service de push du navigateur), `p256dh`* et `auth`* (clés de l'appareil, qui chiffrent le contenu pour lui seul), `created_at`*. Plusieurs lignes par compte (compte partagé). Une ligne est supprimée quand l'appareil se désabonne, ou quand le service de push répond que l'abonnement n'existe plus (404 ou 410). La préférence par compte `notify_new_batches` a été supprimée ([ADR 0003](../adr/0003-push-notifications-instead-of-email.md)).
 
 **`batch`** (lot)
 - `id` PK, `store_id`* FK
@@ -63,7 +64,7 @@
 
 ## Anonymisation
 
-Script documenté dans le README : `email` = `anonyme-<id>@invalide`, nom et adresse remplacés par des valeurs neutres, `password_hash` vidé, `status` = `ANONYMIZED`. Lots, réservations et attestations restent rattachés.
+Script documenté dans le README : `email` = `anonyme-<id>@invalide`, nom et adresse remplacés par des valeurs neutres, `password_hash` vidé, `status` = `ANONYMIZED`, appareils abonnés (`push_subscription`) supprimés. Lots, réservations et attestations restent rattachés.
 
 ## Installation
 

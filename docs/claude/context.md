@@ -26,7 +26,7 @@ L'attestation de don permet au commerce de bénéficier de la réduction d'impô
 | Étape | Qui | Aujourd'hui | Dans la plateforme |
 |---|---|---|---|
 | 1 | Commerce | SMS ou appel au numéro de coordination (lundi–samedi, 8 h–18 h) | Déclarer un lot |
-| 2 | Coordinatrice salariée | Relaie le message sur le groupe de messagerie des 14 associations | E-mail « Nouveau lot disponible » |
+| 2 | Coordinatrice salariée | Relaie le message sur le groupe de messagerie des 14 associations | Notification « Nouveau lot disponible » |
 | 3 | Associations | La première qui répond « je prends » est retenue | Réservation exclusive (`FOR UPDATE`) |
 | 4 | Bénévoles | Chargent les denrées et font signer un bon de collecte papier en deux exemplaires | Confirmer la collecte |
 | 5 | Coordinatrice salariée | Saisit les bons chaque fin de mois dans le tableur partagé | Suivi de tous les lots |

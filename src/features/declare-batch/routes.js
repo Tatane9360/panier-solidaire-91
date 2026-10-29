@@ -1,13 +1,13 @@
 import { randomBytes } from 'node:crypto';
 import { Router } from 'express';
 import { requireRole } from '../../shared/access.js';
-import { errorPage } from '../../shared/html.js';
+import { errorPage, formatDecimal, formatLocal } from '../../shared/html.js';
 import { batchFormPage, batchReviewPage, myBatchesPage } from './pages.js';
 
 const EXPIRED_FORM = 'Formulaire expiré : recommencez la déclaration';
 
 // Déclarer un lot en 3 actions : ouvrir le formulaire, valider (récapitulatif), confirmer.
-export function declareBatchRoutes({ db, clock }) {
+export function declareBatchRoutes({ db, notifications, clock }) {
   const router = Router();
   const storeOnly = requireRole('STORE');
 
@@ -91,9 +91,34 @@ export function declareBatchRoutes({ db, clock }) {
         clock.now(),
       ],
     );
-    // Rien d'inséré : ce formulaire avait déjà servi, on le dit au commerce.
+    // Rien d'inséré : ce formulaire avait déjà servi, on le dit au commerce, sans nouvelle notification.
+    // Le lot est enregistré : une panne pendant la notification ne doit pas faire croire l'inverse au commerce.
+    if (rowCount === 1) {
+      await notifyAssociations(values, req.session.account.id)
+        .catch((error) => console.error('Notification « Nouveau lot disponible » :', error));
+    }
     res.redirect(303, rowCount === 1 ? '/batches?declared=1' : '/batches?duplicate=1');
   });
+
+  // Associations actives qui savent garder le lot au bon niveau de froid ;
+  // chacune est prévenue sur ses appareils abonnés.
+  async function notifyAssociations(values, storeId) {
+    const { rows } = await db.query(
+      `SELECT id FROM account
+       WHERE role = 'ASSOCIATION' AND status = 'ACTIVE' AND $1 = ANY (cold_capacity)`,
+      [values.cold_requirement],
+    );
+    const { rows: [store] } = await db.query('SELECT organization_name FROM account WHERE id = $1', [storeId]);
+    await notifications.newBatchAvailable({
+      associationIds: rows.map((row) => row.id),
+      nature: values.nature,
+      weightKg: formatDecimal(toDecimal(values.weight_kg)),
+      expiryDate: formatLocal(values.expiry_date),
+      pickupStart: formatLocal(values.pickup_start),
+      pickupEnd: formatLocal(values.pickup_end),
+      store: store.organization_name,
+    });
+  }
 
   return router;
 }

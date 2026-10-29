@@ -55,8 +55,9 @@ async function batchRow(batchId) {
   return rows[0];
 }
 
-test('association confirms the pickup from its reservations, the store is emailed and sees it', async () => {
+test('association confirms the pickup from its reservations, the store is notified and sees it', async () => {
   const { store, batchId, client } = await setup();
+  const storeDevice = await env.subscribeDevice(store.id);
   const page = (await client.get('/reservations')).body;
   assert.match(page, new RegExp(`action="/batches/${batchId}/confirm-pickup"`));
   // Prénom prérempli avec celui de la réservation.
@@ -70,21 +71,23 @@ test('association confirms the pickup from its reservations, the store is emaile
     status: 'COLLECTED', collected_at: env.clock.now(), expired_at: null, collected_by_name: 'Léa',
   });
 
-  assert.equal(env.mailbox.sent.length, 1);
-  const [mail] = env.mailbox.sent;
-  assert.equal(mail.to, store.email);
-  assert.equal(mail.subject, 'Votre lot a été collecté');
-  assert.match(mail.text, /Fruits et légumes/);
-  assert.match(mail.text, /02\/11\/2026 10:25/);
+  assert.equal(env.mailbox.sent.length, 0);
+  assert.equal(env.pushes.sent.length, 1);
+  const [push] = env.pushes.sent;
+  assert.equal(push.endpoint, storeDevice);
+  assert.equal(push.title, 'Votre lot a été collecté');
+  assert.match(push.body, /Fruits et légumes/);
+  assert.match(push.body, /02\/11\/2026 10:25/);
+  assert.equal(push.url, '/batches');
 
   const storePage = (await (await loggedIn(store)).get('/batches')).body;
   assert.match(storePage, /Statut : <strong>Collecté<\/strong>/);
   assert.match(storePage, /Collecté le<\/dt><dd>02\/11\/2026 10:25/);
   assert.match(storePage, /Bénévole<\/dt><dd>Léa/);
 
-  // Une seule collecte, donc un seul e-mail.
+  // Une seule collecte, donc une seule notification.
   assert.equal((await client.post(`/batches/${batchId}/confirm-pickup`, { collected_by_name: 'Léa' })).status, 409);
-  assert.equal(env.mailbox.sent.length, 1);
+  assert.equal(env.pushes.sent.length, 1);
 });
 
 test('an expired batch is confirmed within 24 hours and keeps its expired_at', async () => {
@@ -113,7 +116,8 @@ test('a reserved batch whose slot just ended, not yet expired by the scheduler, 
 });
 
 test('refuses the confirmation 24 hours after the end of the slot', async () => {
-  const { association, batchId } = await setup();
+  const { store, association, batchId } = await setup();
+  await env.subscribeDevice(store.id);
   await expireEndedBatches(env.db, new Date('2026-11-02T10:00:00Z'));
   // 10 h 20 le lendemain pile : la fenêtre de 24 h est close.
   env.clock.set(new Date('2026-11-03T09:20:00Z'));
@@ -124,7 +128,7 @@ test('refuses the confirmation 24 hours after the end of the slot', async () => 
   assert.equal(status, 409);
   assert.match(body, /plus de 24 h/);
   assert.equal((await batchRow(batchId)).status, 'EXPIRED');
-  assert.equal(env.mailbox.sent.length, 0);
+  assert.equal(env.pushes.sent.length, 0);
 });
 
 test('the volunteer name is required', async () => {
@@ -137,6 +141,7 @@ test('the volunteer name is required', async () => {
 
 test('only the reserving association, on a batch with an active reservation', async () => {
   const { association, store, batchId, client } = await setup();
+  await env.subscribeDevice(store.id);
 
   const other = await loggedIn(await env.createAccount({ role: 'ASSOCIATION' }));
   await other.get('/cold-capacity');
@@ -158,12 +163,14 @@ test('only the reserving association, on a batch with an active reservation', as
   const storeClient = await loggedIn(store);
   await storeClient.get('/');
   assert.equal((await storeClient.post(`/batches/${batchId}/confirm-pickup`)).status, 403);
-  assert.equal(env.mailbox.sent.length, 0);
+  assert.equal(env.pushes.sent.length, 0);
 });
 
-test('a mail failure does not block the confirmation', async () => {
-  const { batchId, client } = await setup();
-  env.mailbox.failing = true;
+test('a push failure does not block the confirmation', async (t) => {
+  const { store, batchId, client } = await setup();
+  await env.subscribeDevice(store.id);
+  t.mock.method(console, 'error', () => {});
+  env.pushes.failing = true;
   const { status } = await client.post(`/batches/${batchId}/confirm-pickup`, { collected_by_name: 'Karim' });
   assert.equal(status, 303);
   assert.equal((await batchRow(batchId)).status, 'COLLECTED');

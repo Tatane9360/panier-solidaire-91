@@ -223,6 +223,7 @@ async function reserveAndListReservations(client, batchId) {
 
 test('association cancels its reservation: the batch is available again and the reservation is kept', async () => {
   const { association, batchId, client } = await setup();
+  await env.subscribeDevice(association.id);
   const reservations = await reserveAndListReservations(client, batchId);
   assert.match(reservations.body, /Fruits et légumes/);
   assert.match(reservations.body, new RegExp(`action="/batches/${batchId}/cancel-reservation"`));
@@ -238,8 +239,8 @@ test('association cancels its reservation: the batch is available again and the 
   assert.match((await client.get('/available-batches')).body, new RegExp(`/batches/${batchId}/reserve"`));
   const { rows } = await env.db.query('SELECT cancelled_by, cancelled_at FROM reservation WHERE batch_id = $1', [batchId]);
   assert.deepEqual(rows, [{ cancelled_by: association.id, cancelled_at: env.clock.now() }]);
-  // Pas d'e-mail « Nouveau lot disponible » à l'annulation.
-  assert.equal(env.mailbox.sent.length, 0);
+  // Pas de notification « Nouveau lot disponible » à l'annulation.
+  assert.equal(env.pushes.sent.length, 0);
 });
 
 test('after a cancellation, another association can reserve the batch again', async () => {

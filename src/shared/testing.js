@@ -5,21 +5,24 @@ import { buildApp } from '../app.js';
 import { createDb } from './db.js';
 import { migrate } from '../../scripts/migrate.js';
 import { hashPassword } from './password.js';
-import { createNotifications, createMemoryTransport } from './notifications/index.js';
+import { createNotifications, createMemoryTransport, createMemoryPushTransport } from './notifications/index.js';
 
 const START = new Date('2026-11-02T09:00:00Z');
+// Clé publique fictive : en test, aucun message ne part vers un vrai service de push.
+const TEST_VAPID_PUBLIC_KEY = 'BTestPublicKeyForPushSubscriptionsInTests';
 
 export async function setupTestApp({ config = {}, extend } = {}) {
   const db = createDb(process.env.TEST_DATABASE_URL);
   await migrate(db);
   const clock = createTestClock();
   const mailbox = createMemoryTransport();
-  const notifications = createNotifications({ transport: mailbox, from: 'test@example.org' });
+  const pushes = createMemoryPushTransport();
+  const notifications = createNotifications({ db, mailTransport: mailbox, pushTransport: pushes, from: 'test@example.org' });
   const app = buildApp({
     db,
     notifications,
     clock,
-    config: { sessionDurationMinutes: 30, secureCookies: false, ...config },
+    config: { sessionDurationMinutes: 30, secureCookies: false, vapid: { publicKey: TEST_VAPID_PUBLIC_KEY }, ...config },
   });
   // Permet à un test d'ajouter une route, par exemple pour vérifier un contrôle d'accès.
   if (extend) extend(app);
@@ -31,13 +34,18 @@ export async function setupTestApp({ config = {}, extend } = {}) {
     db,
     clock,
     mailbox,
+    pushes,
     client: () => createClient(baseUrl),
     createAccount: (fields) => createAccount(db, clock, fields),
+    subscribeDevice: (accountId) => subscribeDevice(db, clock, accountId),
     async reset() {
       await resetDatabase(db);
       clock.set(START);
       mailbox.sent.length = 0;
       mailbox.failing = false;
+      pushes.sent.length = 0;
+      pushes.gone.clear();
+      pushes.failing = false;
     },
     async close() {
       server.close();
@@ -79,14 +87,16 @@ async function createAccount(db, clock, fields = {}) {
     password: 'mot-de-passe-de-test',
     organization_name: `Structure ${accountCount}`,
     address: '1 rue de l’Exemple, 91000 Évry',
+    cold_capacity: ['AMBIENT'],
     ...fields,
   };
   await db.query(
     "INSERT INTO territory (name) SELECT 'Territoire de test' WHERE NOT EXISTS (SELECT 1 FROM territory)",
   );
   const { rows } = await db.query(
-    `INSERT INTO account (territory_id, role, status, email, password_hash, organization_name, address, created_at)
-     VALUES ((SELECT min(id) FROM territory), $1, $2, $3, $4, $5, $6, $7)
+    `INSERT INTO account (territory_id, role, status, email, password_hash, organization_name, address,
+                          cold_capacity, created_at)
+     VALUES ((SELECT min(id) FROM territory), $1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING id`,
     [
       account.role,
@@ -95,10 +105,24 @@ async function createAccount(db, clock, fields = {}) {
       await hashPassword(account.password),
       account.organization_name,
       account.address,
+      account.cold_capacity,
       clock.now(),
     ],
   );
   return { ...account, id: rows[0].id };
+}
+
+// Abonne un appareil fictif au compte, comme le ferait le navigateur, et renvoie son adresse.
+let deviceCount = 0;
+async function subscribeDevice(db, clock, accountId) {
+  deviceCount += 1;
+  const endpoint = `https://fcm.googleapis.com/fcm/send/appareil-${deviceCount}`;
+  await db.query(
+    `INSERT INTO push_subscription (account_id, endpoint, p256dh, auth, created_at)
+     VALUES ($1, $2, 'cle-publique-de-test', 'secret-de-test', $3)`,
+    [accountId, endpoint, clock.now()],
+  );
+  return endpoint;
 }
 
 // Un tableau envoie plusieurs valeurs sous le même nom, comme des cases cochées.

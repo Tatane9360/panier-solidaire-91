@@ -37,7 +37,7 @@ La plateforme centralise ce circuit, garantit qu'un lot n'est réservé que par 
 
 - Déclarer un lot en trois actions au plus : nature, quantité, poids, valeur, date limite (DLC ou DDM), créneau de retrait, contrainte de froid.
 - Suivre ses lots et savoir quel bénévole vient les retirer.
-- Être prévenu par e-mail quand un lot est collecté.
+- Être prévenu par notification quand un lot est collecté.
 - Consulter et imprimer ses attestations de don.
 
 ### Association *(smartphone)*
@@ -45,7 +45,7 @@ La plateforme centralise ce circuit, garantit qu'un lot n'est réservé que par 
 - Consulter les lots disponibles, filtrés selon sa capacité de froid.
 - Réserver un lot de façon exclusive, même si une autre association clique au même instant.
 - Annuler sa réservation, puis confirmer la collecte jusqu'à 24 h après le créneau.
-- Recevoir une alerte e-mail à chaque nouveau lot compatible.
+- Recevoir une notification à chaque nouveau lot compatible avec sa capacité de froid.
 
 ### Coordination *(ordinateur)*
 
@@ -57,7 +57,7 @@ La plateforme centralise ce circuit, garantit qu'un lot n'est réservé que par 
 ### Automatismes
 
 - Expiration horaire des lots dont le créneau de retrait est dépassé.
-- E-mails transactionnels en français ; un échec d'envoi ne bloque jamais une opération.
+- Notifications push en français, activées appareil par appareil depuis l'accueil ; seule la décision sur une inscription part par e-mail, le demandeur ne pouvant pas encore abonner d'appareil. Un échec d'envoi ne bloque jamais une opération.
 
 ## Stack technique
 
@@ -67,8 +67,8 @@ La plateforme centralise ce circuit, garantit qu'un lot n'est réservé que par 
 | Rendu | HTML généré côté serveur, Tailwind CSS v3.4 |
 | Base de données | PostgreSQL, SQL direct via `pg` (sans ORM) |
 | Tests | `node:test`, sur une vraie base PostgreSQL |
-| E-mail | SMTP (Mailpit en local, Brevo en production) |
-| Mobile | Application web progressive (PWA), compatible iOS 15 et Android 10 |
+| Notifications | Web Push (bibliothèque `web-push`) ; e-mail SMTP pour la décision d'inscription (Mailpit en local, Brevo en production) |
+| Mobile | Application web progressive (PWA), compatible iOS 15 et Android 10 ; notifications à partir d'iOS 16.4 (application ajoutée à l'écran d'accueil) et d'Android 10 |
 | Intégration continue | GitHub Actions avec service PostgreSQL |
 
 Les choix privilégient la stabilité et un minimum de dépendances : authentification, sessions, protection CSRF et migrations sont écrites sans bibliothèque tierce.
@@ -78,14 +78,14 @@ Les choix privilégient la stabilité et un minimum de dépendances : authentifi
 Monolithe organisé **par fonctionnalité** : chaque dossier regroupe ses routes, ses requêtes SQL, ses pages et ses tests.
 
 ```
-src/features/accounts/        inscription, connexion, validation des inscriptions
+src/features/accounts/        inscription, connexion, validation des inscriptions, abonnement aux notifications
 src/features/declare-batch/   déclaration et suivi des lots (commerce)
 src/features/reserve-batch/   lots disponibles, réservation, collecte (association)
 src/features/certificates/    attestations de don
 src/features/monitoring/      suivi, corrections, export (Coordination)
 src/features/expire-batches/  tâche horaire d'expiration
 src/shared/                   base de données, sessions, contrôle d'accès
-src/shared/notifications/     seul module qui envoie des e-mails
+src/shared/notifications/     seul module qui envoie des notifications (push, e-mail)
 scripts/                      script d'installation
 ```
 
@@ -99,9 +99,10 @@ Prérequis prévus :
 
 - Node.js 26 ;
 - PostgreSQL (installé localement, ou via Docker Compose, facultatif) ;
-- Mailpit pour recevoir les e-mails en local.
+- Mailpit pour recevoir en local l'e-mail de décision d'inscription ;
+- une paire de clés VAPID pour les notifications push, propre à chaque installation : `pnpm exec web-push generate-vapid-keys`, à copier dans `VAPID_PUBLIC_KEY` et `VAPID_PRIVATE_KEY` du fichier `.env` (la clé privée est un secret, jamais dans le dépôt). Le serveur refuse de démarrer sans elles.
 
-La configuration passe par des variables d'environnement, décrites dans un fichier d'exemple sans secret : connexion à la base, expéditeur et serveur SMTP, durée de session, taille de page du suivi, identifiants du premier compte Coordination.
+La configuration passe par des variables d'environnement, décrites dans un fichier d'exemple sans secret : connexion à la base, expéditeur et serveur SMTP, clés VAPID, durée de session, taille de page du suivi, identifiants du premier compte Coordination.
 
 Un script d'installation crée les tables, le territoire pilote et le premier compte Coordination. Des comptes de démonstration seront fournis pour chaque profil, avec des données entièrement fictives.
 
@@ -109,7 +110,7 @@ Un script d'installation crée les tables, le territoire pilote et le premier co
 
 - Chaque règle métier est couverte par un test qui passe par HTTP, comme un utilisateur, sur une vraie base PostgreSQL.
 - La réservation est testée avec deux demandes simultanées pour garantir son exclusivité.
-- Les e-mails et l'heure sont simulés pendant les tests, pour vérifier l'expiration et les délais sans attendre.
+- Les e-mails, les notifications push et l'heure sont simulés pendant les tests, pour vérifier l'expiration et les délais sans attendre.
 - La fusion vers `main` est bloquée si un test échoue.
 - Objectif de charge : 35 lots par heure avec un temps de réponse inférieur à 2 secondes (script k6).
 - Accessibilité : parcours principaux conformes au RGAA 4.1.2.
@@ -117,6 +118,7 @@ Un script d'installation crée les tables, le territoire pilote et le premier co
 ## Sécurité et données personnelles
 
 - Requêtes SQL paramétrées, mots de passe hachés (scrypt), protection CSRF.
+- Notifications chiffrées de bout en bout pour l'appareil : les services de push des navigateurs les transmettent sans pouvoir les lire. Le serveur n'envoie qu'aux services de push connus.
 - Contrôle d'accès par profil sur chaque route ; chaque compte ne voit que ses propres données.
 - Sessions expirées après 30 minutes d'inactivité ; connexion bloquée temporairement après 5 échecs.
 - Minimisation RGPD : les bénévoles n'ont pas de compte, seul leur prénom est saisi.
