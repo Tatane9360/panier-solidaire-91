@@ -23,9 +23,11 @@ const batch = {
   cold_requirement: 'CHILLED',
 };
 
+const submissionToken = (body) => body.match(/name="submission_token" value="([^"]+)"/)[1];
+
 async function declare(client) {
   const form = await client.get('/batches/new');
-  const values = { submission_token: form.body.match(/name="submission_token" value="([^"]+)"/)[1], ...batch };
+  const values = { submission_token: submissionToken(form.body), ...batch };
   await client.post('/batches/review', values);
   return client.post('/batches', values);
 }
@@ -37,64 +39,93 @@ async function loggedIn(fields) {
   return { account, client };
 }
 
-const recipients = () => env.mailbox.sent.map((message) => message.to).sort();
+// Association avec un appareil abonné ; renvoie l'adresse de l'appareil.
+async function subscribedAssociation(fields) {
+  const association = await env.createAccount({ role: 'ASSOCIATION', ...fields });
+  return env.subscribeDevice(association.id);
+}
 
-test('declaring a batch alerts each active association that wants it and can keep it cold', async () => {
+const notifiedDevices = () => env.pushes.sent.map((push) => push.endpoint).sort();
+
+test('declaring a batch notifies every device of active associations that can keep it cold', async () => {
   const { client } = await loggedIn({ role: 'STORE', organization_name: 'Épicerie du Marché' });
-  const chilled = await env.createAccount({ role: 'ASSOCIATION', cold_capacity: ['AMBIENT', 'CHILLED'] });
-  const other = await env.createAccount({ role: 'ASSOCIATION', cold_capacity: ['CHILLED'] });
-  await env.createAccount({ role: 'ASSOCIATION', cold_capacity: ['AMBIENT'] });
-  await env.createAccount({ role: 'ASSOCIATION', cold_capacity: ['CHILLED'], notify_new_batches: false });
-  await env.createAccount({ role: 'ASSOCIATION', cold_capacity: ['CHILLED'], status: 'PENDING' });
-  await env.createAccount({ role: 'STORE' });
+  const ambientAndChilled = await env.createAccount({ role: 'ASSOCIATION', cold_capacity: ['AMBIENT', 'CHILLED'] });
+  // Compte partagé : deux appareils abonnés, tous deux prévenus.
+  const phone = await env.subscribeDevice(ambientAndChilled.id);
+  const tablet = await env.subscribeDevice(ambientAndChilled.id);
+  const chilledOnly = await subscribedAssociation({ cold_capacity: ['CHILLED'] });
+  await subscribedAssociation({ cold_capacity: ['AMBIENT'] });
+  await subscribedAssociation({ cold_capacity: ['CHILLED'], status: 'PENDING' });
+  // Aucun appareil abonné : rien à envoyer, et aucun e-mail non plus.
+  await env.createAccount({ role: 'ASSOCIATION', cold_capacity: ['CHILLED'] });
+  const otherStore = await env.createAccount({ role: 'STORE' });
+  await env.subscribeDevice(otherStore.id);
 
   assert.equal((await declare(client)).status, 303);
 
-  assert.deepEqual(recipients(), [chilled.email, other.email].sort());
-  const [message] = env.mailbox.sent;
-  assert.equal(message.subject, 'Nouveau lot disponible');
-  assert.match(message.text, /Yaourts nature/);
-  assert.match(message.text, /12,5 kg/);
-  assert.match(message.text, /05\/11\/2026/);
-  assert.match(message.text, /03\/11\/2026 14:00 – 03\/11\/2026 18:00/);
-  assert.match(message.text, /Épicerie du Marché/);
-  assert.match(message.text, /http:\/\/localhost:3000\/available-batches/);
+  assert.deepEqual(notifiedDevices(), [phone, tablet, chilledOnly].sort());
+  assert.equal(env.mailbox.sent.length, 0);
+  const [push] = env.pushes.sent;
+  assert.equal(push.title, 'Nouveau lot disponible');
+  assert.match(push.body, /Yaourts nature/);
+  assert.match(push.body, /12,5 kg/);
+  assert.match(push.body, /05\/11\/2026/);
+  assert.match(push.body, /03\/11\/2026 14:00 au 03\/11\/2026 18:00/);
+  assert.match(push.body, /Épicerie du Marché/);
+  assert.equal(push.url, '/available-batches');
 });
 
-test('a duplicate submission sends no second alert', async () => {
+test('a duplicate submission sends no second notification', async () => {
   const { client } = await loggedIn({ role: 'STORE' });
-  await env.createAccount({ role: 'ASSOCIATION', cold_capacity: ['CHILLED'] });
+  await subscribedAssociation({ cold_capacity: ['CHILLED'] });
   const form = await client.get('/batches/new');
-  const values = { submission_token: form.body.match(/name="submission_token" value="([^"]+)"/)[1], ...batch };
+  const values = { submission_token: submissionToken(form.body), ...batch };
   await client.post('/batches', values);
   await client.post('/batches', values);
-  assert.equal(env.mailbox.sent.length, 1);
+  assert.equal(env.pushes.sent.length, 1);
 });
 
-test('a failing mail service does not block the declaration', async () => {
+test('a failing push service is logged and does not block the declaration', async (t) => {
   const { client } = await loggedIn({ role: 'STORE' });
-  await env.createAccount({ role: 'ASSOCIATION', cold_capacity: ['CHILLED'] });
-  env.mailbox.failing = true;
+  await subscribedAssociation({ cold_capacity: ['CHILLED'] });
+  const logged = t.mock.method(console, 'error', () => {});
+  env.pushes.failing = true;
 
   const response = await declare(client);
   assert.equal(response.status, 303);
+  assert.equal(response.location, '/batches?declared=1');
   const { rows } = await env.db.query("SELECT count(*)::int AS count FROM batch WHERE status = 'DECLARED'");
   assert.equal(rows[0].count, 1);
+  assert.equal(logged.mock.callCount(), 1);
 });
 
-test('cancelling a reservation sends no new batch alert', async () => {
+test('a device whose subscription is gone is removed, the others are still notified', async () => {
+  const { client } = await loggedIn({ role: 'STORE' });
+  const gone = await subscribedAssociation({ cold_capacity: ['CHILLED'] });
+  const active = await subscribedAssociation({ cold_capacity: ['CHILLED'] });
+  env.pushes.gone.add(gone);
+
+  await declare(client);
+
+  assert.deepEqual(notifiedDevices(), [active]);
+  const { rows } = await env.db.query('SELECT endpoint FROM push_subscription');
+  assert.deepEqual(rows, [{ endpoint: active }]);
+});
+
+test('cancelling a reservation sends no new batch notification', async () => {
   const { client: store } = await loggedIn({ role: 'STORE' });
   await declare(store);
-  const { client: association } = await loggedIn({ role: 'ASSOCIATION', cold_capacity: ['CHILLED'] });
-  await env.createAccount({ role: 'ASSOCIATION', cold_capacity: ['CHILLED'] });
+  const { account, client: association } = await loggedIn({ role: 'ASSOCIATION', cold_capacity: ['CHILLED'] });
+  await env.subscribeDevice(account.id);
+  await subscribedAssociation({ cold_capacity: ['CHILLED'] });
   const { rows: [{ id }] } = await env.db.query('SELECT id FROM batch');
   await association.get('/available-batches');
   await association.post(`/batches/${id}/reserve`, { reserved_by_name: 'Karim' });
-  env.mailbox.sent.length = 0;
+  env.pushes.sent.length = 0;
 
   const response = await association.post(`/batches/${id}/cancel-reservation`, {});
   assert.equal(response.status, 303);
   const { rows } = await env.db.query('SELECT status FROM batch');
   assert.equal(rows[0].status, 'DECLARED');
-  assert.equal(env.mailbox.sent.length, 0);
+  assert.equal(env.pushes.sent.length, 0);
 });

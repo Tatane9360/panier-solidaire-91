@@ -39,16 +39,10 @@ export function reserveBatchRoutes({ db, notifications, clock }) {
   }
 
   async function sendColdCapacityPage(req, res, { status = 200, error = '' } = {}) {
-    const { rows: [account] } = await db.query(
-      'SELECT cold_capacity, notify_new_batches FROM account WHERE id = $1',
-      [req.session.account.id],
-    );
     res.status(status).send(coldCapacityPage({
       session: req.session,
-      coldCapacity: account.cold_capacity,
-      notifyNewBatches: account.notify_new_batches,
+      coldCapacity: await readColdCapacity(req.session.account.id),
       saved: req.query.saved === '1',
-      alertsSaved: req.query.alerts === '1',
       error,
     }));
   }
@@ -182,10 +176,9 @@ export function reserveBatchRoutes({ db, notifications, clock }) {
     try {
       collected = await db.withTransaction(async (client) => {
         const { rows: [batch] } = await client.query(
-          `SELECT batch.status, batch.pickup_end, batch.nature, reservation.association_id, store.email,
+          `SELECT batch.status, batch.pickup_end, batch.nature, batch.store_id, reservation.association_id,
                   to_char($2::timestamptz AT TIME ZONE 'Europe/Paris', 'YYYY-MM-DD"T"HH24:MI') AS collected_at
            FROM batch
-           JOIN account AS store ON store.id = batch.store_id
            LEFT JOIN reservation ON reservation.batch_id = batch.id AND reservation.cancelled_at IS NULL
            WHERE batch.id = $1
            FOR UPDATE OF batch`,
@@ -227,7 +220,7 @@ export function reserveBatchRoutes({ db, notifications, clock }) {
       return res.status(error.status).send(collectionRefusedPage(error));
     }
     await notifications.batchCollected({
-      email: collected.email,
+      storeId: collected.store_id,
       nature: collected.nature,
       collectedAt: formatLocal(collected.collected_at),
     });
@@ -263,7 +256,7 @@ export function reserveBatchRoutes({ db, notifications, clock }) {
         }
 
         await releaseReservation(client, { batchId: req.params.id, cancelledBy: req.session.account.id, now });
-        // Pas d'e-mail « Nouveau lot disponible » : le lot n'est pas nouveau.
+        // Pas de notification « Nouveau lot disponible » : le lot n'est pas nouveau.
         await client.query("UPDATE batch SET status = 'DECLARED' WHERE id = $1", [req.params.id]);
       });
     } catch (error) {
@@ -287,15 +280,6 @@ export function reserveBatchRoutes({ db, notifications, clock }) {
     if (error) return sendColdCapacityPage(req, res, { status: 400, error });
     await db.query('UPDATE account SET cold_capacity = $1 WHERE id = $2', [coldCapacity, req.session.account.id]);
     res.redirect(303, '/cold-capacity?saved=1');
-  });
-
-  // Alerte « Nouveau lot disponible » : case décochée = champ absent.
-  router.post('/new-batch-alerts', associationOnly, async (req, res) => {
-    await db.query('UPDATE account SET notify_new_batches = $1 WHERE id = $2', [
-      req.body.notify_new_batches === '1',
-      req.session.account.id,
-    ]);
-    res.redirect(303, '/cold-capacity?alerts=1');
   });
 
   return router;

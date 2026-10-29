@@ -42,6 +42,8 @@ export function page({ title, content }) {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escapeHtml(title)} – Panier Solidaire 91</title>
   <link rel="stylesheet" href="/app.css">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#166534">
 </head>
 <body class="bg-white text-slate-900">
   <a href="#contenu" class="sr-only focus:not-sr-only">Aller au contenu</a>

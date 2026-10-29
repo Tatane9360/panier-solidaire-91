@@ -100,17 +100,17 @@ export function declareBatchRoutes({ db, notifications, clock }) {
     res.redirect(303, rowCount === 1 ? '/batches?declared=1' : '/batches?duplicate=1');
   });
 
-  // Associations actives qui veulent l'alerte et savent garder le lot au bon niveau de froid.
+  // Associations actives qui savent garder le lot au bon niveau de froid ;
+  // chacune est prévenue sur ses appareils abonnés.
   async function alertAssociations(values, storeId) {
     const { rows } = await db.query(
-      `SELECT email FROM account
-       WHERE role = 'ASSOCIATION' AND status = 'ACTIVE' AND notify_new_batches
-         AND $1 = ANY (cold_capacity)`,
+      `SELECT id FROM account
+       WHERE role = 'ASSOCIATION' AND status = 'ACTIVE' AND $1 = ANY (cold_capacity)`,
       [values.cold_requirement],
     );
     const { rows: [store] } = await db.query('SELECT organization_name FROM account WHERE id = $1', [storeId]);
     await notifications.newBatchAvailable({
-      emails: rows.map((row) => row.email),
+      associationIds: rows.map((row) => row.id),
       nature: values.nature,
       weightKg: formatDecimal(toDecimal(values.weight_kg)),
       expiryDate: formatLocal(values.expiry_date),

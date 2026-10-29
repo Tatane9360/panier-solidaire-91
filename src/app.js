@@ -16,7 +16,7 @@ export function buildApp({ db, notifications, clock, config }) {
   app.use(express.urlencoded({ extended: false }));
   app.use(sessions({ db, clock, config }));
   app.use(protectActions({ publicActions: ['/login', '/register'] }));
-  app.use(accountsRoutes({ db, notifications, clock }));
+  app.use(accountsRoutes({ db, notifications, clock, config }));
   app.use(declareBatchRoutes({ db, notifications, clock }));
   app.use(reserveBatchRoutes({ db, notifications, clock }));
   return app;

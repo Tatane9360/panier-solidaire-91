@@ -16,7 +16,7 @@ const REGISTRATION_NOT_FOUND = 'Inscription introuvable ou déjà traitée';
 // Hash d'un mot de passe aléatoire, que personne ne connaît (voir POST /login).
 const DUMMY_HASH = await hashPassword(randomBytes(16).toString('hex'));
 
-export function accountsRoutes({ db, notifications, clock }) {
+export function accountsRoutes({ db, notifications, clock, config }) {
   const router = Router();
 
   router.get('/login', (req, res) => {
@@ -158,8 +158,54 @@ export function accountsRoutes({ db, notifications, clock }) {
   });
 
   router.get('/', requireRole('STORE', 'ASSOCIATION', 'COORDINATOR'), (req, res) => {
-    res.send(homePage({ session: req.session }));
+    res.send(homePage({ session: req.session, vapidPublicKey: config.vapid.publicKey }));
+  });
+
+  // Abonnement d'un appareil aux notifications push, envoyé par public/notifications.js.
+  // Un appareil n'appartient qu'à un compte : celui qui l'abonne en dernier (appareil prêté, changement de compte).
+  router.post('/push-subscriptions', requireRole('STORE', 'ASSOCIATION'), async (req, res) => {
+    const endpoint = String(req.body.endpoint ?? '');
+    const p256dh = String(req.body.p256dh ?? '');
+    const auth = String(req.body.auth ?? '');
+    if (!isPushServiceUrl(endpoint) || !isBase64Url(p256dh) || !isBase64Url(auth)) {
+      return res.status(400).send(errorPage('Abonnement aux notifications invalide'));
+    }
+    await db.query(
+      `INSERT INTO push_subscription (account_id, endpoint, p256dh, auth, created_at)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (endpoint) DO UPDATE
+         SET account_id = EXCLUDED.account_id, p256dh = EXCLUDED.p256dh, auth = EXCLUDED.auth`,
+      [req.session.account.id, endpoint, p256dh, auth, clock.now()],
+    );
+    res.sendStatus(204);
+  });
+
+  // Seulement un appareil du compte connecté : sinon, rien n'est supprimé (même réponse).
+  router.post('/push-subscriptions/delete', requireRole('STORE', 'ASSOCIATION'), async (req, res) => {
+    await db.query('DELETE FROM push_subscription WHERE endpoint = $1 AND account_id = $2', [
+      String(req.body.endpoint ?? ''),
+      req.session.account.id,
+    ]);
+    res.sendStatus(204);
   });
 
   return router;
+}
+
+// Services de push de Chrome et Android, Firefox, Safari et Edge. Le serveur envoie une requête
+// à l'adresse de l'abonnement : une liste fermée l'empêche de viser un autre serveur.
+const PUSH_SERVICE_HOSTS = ['fcm.googleapis.com', 'updates.push.services.mozilla.com', 'web.push.apple.com'];
+const PUSH_SERVICE_DOMAINS = ['.notify.windows.com', '.push.apple.com'];
+const MAX_ENDPOINT_LENGTH = 1024;
+
+function isPushServiceUrl(value) {
+  if (value.length > MAX_ENDPOINT_LENGTH || !URL.canParse(value)) return false;
+  const { protocol, hostname } = new URL(value);
+  return protocol === 'https:'
+    && (PUSH_SERVICE_HOSTS.includes(hostname) || PUSH_SERVICE_DOMAINS.some((domain) => hostname.endsWith(domain)));
+}
+
+// Clés de l'appareil, encodées en base64url par le navigateur.
+function isBase64Url(value) {
+  return /^[A-Za-z0-9_-]{1,200}$/.test(value);
 }

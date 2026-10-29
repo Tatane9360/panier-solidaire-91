@@ -3,14 +3,15 @@ import { readConfig } from './shared/config.js';
 import { createDb } from './shared/db.js';
 import { systemClock } from './shared/clock.js';
 import { expireBatches } from './features/expire-batches/expire-batches.js';
-import { createNotifications, createSmtpTransport } from './shared/notifications/index.js';
+import { createNotifications, createSmtpTransport, createWebPushTransport } from './shared/notifications/index.js';
 
 const config = readConfig(process.env);
 const db = createDb(config.databaseUrl);
 const notifications = createNotifications({
-  transport: createSmtpTransport(config.smtp),
+  db,
+  mailTransport: createSmtpTransport(config.smtp),
+  pushTransport: createWebPushTransport(config.vapid),
   from: config.mailFrom,
-  appUrl: config.appUrl,
 });
 
 const app = buildApp({ db, notifications, clock: systemClock, config });
