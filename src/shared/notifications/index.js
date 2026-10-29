@@ -1,7 +1,7 @@
 // Seul module qui envoie des e-mails. Un échec est journalisé, jamais propagé.
 import nodemailer from 'nodemailer';
 
-export function createNotifications({ transport, from }) {
+export function createNotifications({ transport, from, appUrl }) {
   async function send(message) {
     try {
       await transport.send({ from, ...message });
@@ -32,7 +32,35 @@ export function createNotifications({ transport, from }) {
     });
   }
 
-  return { send, registrationDecided, batchCollected };
+  // Nouveau lot, un e-mail par association pour ne pas révéler les adresses des autres.
+  // Dates déjà formatées en heure de Paris, poids déjà au format français.
+  async function newBatchAvailable({ emails, nature, weightKg, expiryDate, pickupStart, pickupEnd, store }) {
+    const text = `Bonjour,
+
+Un nouveau lot est disponible :
+`
+      + `- Nature : ${nature}
+- Poids : ${weightKg} kg
+- Date limite : ${expiryDate}
+`
+      + `- Créneau de retrait : ${pickupStart} – ${pickupEnd}
+- Commerce : ${store}
+
+`
+      + `Pour le réserver : ${appUrl}/available-batches
+
+`
+      + `Vous pouvez désactiver ces alertes depuis la page « Capacité de froid » de votre compte.
+
+`
+      + `La Coordination du Panier Solidaire 91`;
+    // ponytail: envois en série avant la réponse ; file d'attente si le nombre d'associations grossit.
+    for (const email of emails) {
+      await send({ to: email, subject: 'Nouveau lot disponible', text });
+    }
+  }
+
+  return { send, registrationDecided, batchCollected, newBatchAvailable };
 }
 
 export function createSmtpTransport({ host, port, user, password }) {

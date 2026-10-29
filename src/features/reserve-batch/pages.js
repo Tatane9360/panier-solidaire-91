@@ -70,7 +70,7 @@ export function availableBatchesPage({ session, batches, coldCapacity, filtered,
   });
 }
 
-export function coldCapacityPage({ session, coldCapacity, saved = false, error = '' }) {
+export function coldCapacityPage({ session, coldCapacity, notifyNewBatches, saved = false, alertsSaved = false, error = '' }) {
   const boxes = Object.entries(COLD_LABELS)
     .map(([level, label]) => {
       const checked = coldCapacity.includes(level) ? ' checked' : '';
@@ -83,7 +83,9 @@ export function coldCapacityPage({ session, coldCapacity, saved = false, error =
     .join('');
   const notice = saved
     ? '<p role="status" class="mb-4 border-l-4 border-green-700 bg-green-50 p-3 text-green-900">Capacité de froid enregistrée.</p>'
-    : '';
+    : alertsSaved
+      ? '<p role="status" class="mb-4 border-l-4 border-green-700 bg-green-50 p-3 text-green-900">Préférence d’alerte enregistrée.</p>'
+      : '';
   const alert = error
     ? `<p id="erreur-cold_capacity" role="alert" class="mb-4 border-l-4 border-red-700 bg-red-50 p-3 text-red-900">${escapeHtml(error)}</p>`
     : '';
@@ -100,6 +102,15 @@ export function coldCapacityPage({ session, coldCapacity, saved = false, error =
       </fieldset>
       <p>La modification s’applique à vos prochaines réservations.</p>
       <button type="submit" class="w-full rounded bg-green-800 px-4 py-3 font-semibold text-white">Enregistrer</button>
+    </form>
+    <h2 class="mb-4 mt-8 text-xl font-bold">Alertes par e-mail</h2>
+    <form method="post" action="/new-batch-alerts" class="space-y-4">
+      ${csrfField(session)}
+      <div>
+        <input id="notify_new_batches" name="notify_new_batches" type="checkbox" value="1"${notifyNewBatches ? ' checked' : ''}>
+        <label for="notify_new_batches">Recevoir un e-mail à chaque nouveau lot compatible avec ma capacité de froid</label>
+      </div>
+      <button type="submit" class="w-full rounded bg-green-800 px-4 py-3 font-semibold text-white">Enregistrer la préférence</button>
     </form>
     <p class="mt-6"><a href="/available-batches" class="underline">Voir les lots disponibles</a></p>
     <p class="mt-2"><a href="/" class="underline">Revenir à l’accueil</a></p>`,

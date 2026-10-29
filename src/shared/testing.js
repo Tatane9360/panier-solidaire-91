@@ -14,7 +14,11 @@ export async function setupTestApp({ config = {}, extend } = {}) {
   await migrate(db);
   const clock = createTestClock();
   const mailbox = createMemoryTransport();
-  const notifications = createNotifications({ transport: mailbox, from: 'test@example.org' });
+  const notifications = createNotifications({
+    transport: mailbox,
+    from: 'test@example.org',
+    appUrl: 'http://localhost:3000',
+  });
   const app = buildApp({
     db,
     notifications,
@@ -79,14 +83,17 @@ async function createAccount(db, clock, fields = {}) {
     password: 'mot-de-passe-de-test',
     organization_name: `Structure ${accountCount}`,
     address: '1 rue de l’Exemple, 91000 Évry',
+    cold_capacity: ['AMBIENT'],
+    notify_new_batches: true,
     ...fields,
   };
   await db.query(
     "INSERT INTO territory (name) SELECT 'Territoire de test' WHERE NOT EXISTS (SELECT 1 FROM territory)",
   );
   const { rows } = await db.query(
-    `INSERT INTO account (territory_id, role, status, email, password_hash, organization_name, address, created_at)
-     VALUES ((SELECT min(id) FROM territory), $1, $2, $3, $4, $5, $6, $7)
+    `INSERT INTO account (territory_id, role, status, email, password_hash, organization_name, address,
+                          cold_capacity, notify_new_batches, created_at)
+     VALUES ((SELECT min(id) FROM territory), $1, $2, $3, $4, $5, $6, $7, $8, $9)
      RETURNING id`,
     [
       account.role,
@@ -95,6 +102,8 @@ async function createAccount(db, clock, fields = {}) {
       await hashPassword(account.password),
       account.organization_name,
       account.address,
+      account.cold_capacity,
+      account.notify_new_batches,
       clock.now(),
     ],
   );

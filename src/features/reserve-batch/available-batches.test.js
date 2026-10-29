@@ -110,7 +110,7 @@ test('cold capacity page offers AMBIENT, CHILLED and FROZEN boxes in a fieldset,
   const { status, body } = await client.get('/cold-capacity');
   assert.equal(status, 200);
   assert.match(body, /<fieldset[\s\S]*<legend[\s\S]*<\/fieldset>/);
-  const boxes = [...body.matchAll(/<input[^>]*type="checkbox"[^>]*>/g)].map(([input]) => input);
+  const boxes = [...body.matchAll(/<input[^>]*name="cold_capacity"[^>]*>/g)].map(([input]) => input);
   assert.deepEqual(boxes.map((input) => input.match(/value="(\w+)"/)[1]), ['AMBIENT', 'CHILLED', 'FROZEN']);
   assert.deepEqual(boxes.map((input) => input.includes(' checked')), [true, false, false]);
 });

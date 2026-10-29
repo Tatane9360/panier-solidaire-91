@@ -6,6 +6,8 @@ export function readConfig(env) {
     pageSize: Number(env.PAGE_SIZE ?? 50),
     secureCookies: env.NODE_ENV === 'production',
     mailFrom: env.MAIL_FROM,
+    // Adresse publique de l'application, pour les liens des e-mails.
+    appUrl: env.APP_URL ?? `http://localhost:${env.PORT ?? 3000}`,
     smtp: {
       host: env.SMTP_HOST,
       port: Number(env.SMTP_PORT ?? 587),

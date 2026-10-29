@@ -38,6 +38,21 @@ export function reserveBatchRoutes({ db, notifications, clock }) {
     return rows[0].cold_capacity;
   }
 
+  async function sendColdCapacityPage(req, res, { status = 200, error = '' } = {}) {
+    const { rows: [account] } = await db.query(
+      'SELECT cold_capacity, notify_new_batches FROM account WHERE id = $1',
+      [req.session.account.id],
+    );
+    res.status(status).send(coldCapacityPage({
+      session: req.session,
+      coldCapacity: account.cold_capacity,
+      notifyNewBatches: account.notify_new_batches,
+      saved: req.query.saved === '1',
+      alertsSaved: req.query.alerts === '1',
+      error,
+    }));
+  }
+
   // Lot disponible : DECLARED, date limite (jour de Paris) et créneau non dépassés,
   // d'après l'horloge et sans attendre le planificateur.
   // Le filtre par capacité de froid est actif sauf avec ?all=1.
@@ -258,10 +273,7 @@ export function reserveBatchRoutes({ db, notifications, clock }) {
     res.redirect(303, '/reservations?cancelled=1');
   });
 
-  router.get('/cold-capacity', associationOnly, async (req, res) => {
-    const coldCapacity = await readColdCapacity(req.session.account.id);
-    res.send(coldCapacityPage({ session: req.session, coldCapacity, saved: req.query.saved === '1' }));
-  });
+  router.get('/cold-capacity', associationOnly, (req, res) => sendColdCapacityPage(req, res));
 
   // Aucune case cochée : le champ est absent. Une seule : une chaîne. Plusieurs : un tableau.
   // Le Set retire les doublons : la capacité est un ensemble.
@@ -272,15 +284,18 @@ export function reserveBatchRoutes({ db, notifications, clock }) {
     // Une capacité vide masquerait tous les lots : c'est presque toujours une case décochée par erreur.
     if (coldCapacity.length === 0) error = 'Cochez au moins une case.';
     else if (!coldCapacity.every((level) => Object.keys(COLD_LABELS).includes(level))) error = 'Niveau de froid inconnu.';
-    if (error) {
-      return res.status(400).send(coldCapacityPage({
-        session: req.session,
-        coldCapacity: await readColdCapacity(req.session.account.id),
-        error,
-      }));
-    }
+    if (error) return sendColdCapacityPage(req, res, { status: 400, error });
     await db.query('UPDATE account SET cold_capacity = $1 WHERE id = $2', [coldCapacity, req.session.account.id]);
     res.redirect(303, '/cold-capacity?saved=1');
+  });
+
+  // Alerte « Nouveau lot disponible » : case décochée = champ absent.
+  router.post('/new-batch-alerts', associationOnly, async (req, res) => {
+    await db.query('UPDATE account SET notify_new_batches = $1 WHERE id = $2', [
+      req.body.notify_new_batches === '1',
+      req.session.account.id,
+    ]);
+    res.redirect(303, '/cold-capacity?alerts=1');
   });
 
   return router;

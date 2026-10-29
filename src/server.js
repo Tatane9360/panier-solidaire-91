@@ -10,6 +10,7 @@ const db = createDb(config.databaseUrl);
 const notifications = createNotifications({
   transport: createSmtpTransport(config.smtp),
   from: config.mailFrom,
+  appUrl: config.appUrl,
 });
 
 const app = buildApp({ db, notifications, clock: systemClock, config });

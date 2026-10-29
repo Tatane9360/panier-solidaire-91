@@ -1,13 +1,13 @@
 import { randomBytes } from 'node:crypto';
 import { Router } from 'express';
 import { requireRole } from '../../shared/access.js';
-import { errorPage } from '../../shared/html.js';
+import { errorPage, formatDecimal, formatLocal } from '../../shared/html.js';
 import { batchFormPage, batchReviewPage, myBatchesPage } from './pages.js';
 
 const EXPIRED_FORM = 'Formulaire expiré : recommencez la déclaration';
 
 // Déclarer un lot en 3 actions : ouvrir le formulaire, valider (récapitulatif), confirmer.
-export function declareBatchRoutes({ db, clock }) {
+export function declareBatchRoutes({ db, notifications, clock }) {
   const router = Router();
   const storeOnly = requireRole('STORE');
 
@@ -91,9 +91,30 @@ export function declareBatchRoutes({ db, clock }) {
         clock.now(),
       ],
     );
-    // Rien d'inséré : ce formulaire avait déjà servi, on le dit au commerce.
+    // Rien d'inséré : ce formulaire avait déjà servi, on le dit au commerce, sans nouvelle alerte.
+    if (rowCount === 1) await alertAssociations(values, req.session.account.id);
     res.redirect(303, rowCount === 1 ? '/batches?declared=1' : '/batches?duplicate=1');
   });
+
+  // Associations actives qui veulent l'alerte et savent garder le lot au bon niveau de froid.
+  async function alertAssociations(values, storeId) {
+    const { rows } = await db.query(
+      `SELECT email FROM account
+       WHERE role = 'ASSOCIATION' AND status = 'ACTIVE' AND notify_new_batches
+         AND $1 = ANY (cold_capacity)`,
+      [values.cold_requirement],
+    );
+    const { rows: [store] } = await db.query('SELECT organization_name FROM account WHERE id = $1', [storeId]);
+    await notifications.newBatchAvailable({
+      emails: rows.map((row) => row.email),
+      nature: values.nature,
+      weightKg: formatDecimal(toDecimal(values.weight_kg)),
+      expiryDate: formatLocal(values.expiry_date),
+      pickupStart: formatLocal(values.pickup_start),
+      pickupEnd: formatLocal(values.pickup_end),
+      store: store.organization_name,
+    });
+  }
 
   return router;
 }
