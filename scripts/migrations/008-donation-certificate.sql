@@ -16,10 +16,13 @@ CREATE TABLE donation_certificate (
 
 CREATE INDEX donation_certificate_store_id ON donation_certificate (store_id);
 
--- Poids et valeur sont figés à l'émission : une correction ultérieure du lot ne change pas l'attestation.
+-- Nature, quantité, poids et valeur sont figés à l'émission : une correction ultérieure du lot ne change pas l'attestation.
 CREATE TABLE certificate_batch (
   certificate_id integer NOT NULL REFERENCES donation_certificate (id),
   batch_id integer NOT NULL REFERENCES batch (id),
+  nature text NOT NULL,
+  quantity integer NOT NULL,
+  quantity_unit text NOT NULL,
   weight_kg numeric NOT NULL,
   value_eur numeric NOT NULL,
   PRIMARY KEY (certificate_id, batch_id)

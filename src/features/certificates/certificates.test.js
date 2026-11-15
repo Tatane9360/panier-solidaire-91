@@ -108,23 +108,26 @@ test('numbers follow a sequence that restarts every year of issue, in Paris time
   ]);
 });
 
-test('weight and value are frozen: correcting the batch later does not change the certificate', async () => {
+test('nature, quantity, weight and value are frozen: correcting the batch later does not change the certificate', async () => {
   const store = await env.createAccount({ role: 'STORE' });
   const batchId = await insertBatch(store.id, { weight: 12.5, value: 30 });
   const { client } = await coordinatorClient();
   const { location } = await issue(client, store);
   const before = (await client.get(location)).body;
 
-  await env.db.query('UPDATE batch SET weight_kg = 99, value_eur = 999 WHERE id = $1', [batchId]);
+  await env.db.query("UPDATE batch SET nature = 'Autre chose', quantity = 77, quantity_unit = 'palettes', weight_kg = 99, value_eur = 999 WHERE id = $1", [batchId]);
 
   assert.equal((await client.get(location)).body, before);
   const { rows: [line] } = await env.db.query('SELECT weight_kg, value_eur FROM certificate_batch WHERE batch_id = $1', [batchId]);
   assert.deepEqual([Number(line.weight_kg), Number(line.value_eur)], [12.5, 30]);
+  assert.match(before, /Pain/);
+  assert.doesNotMatch(before, /Autre chose|palettes/);
 });
 
-test('an overlapping ISSUED certificate gives a warning listing the batches already certified, then can be confirmed', async () => {
+test('an overlapping ISSUED certificate gives a warning listing the batches of the period already certified, then can be confirmed', async () => {
   const store = await env.createAccount({ role: 'STORE' });
-  await insertBatch(store.id, { nature: 'Déjà attesté', collectedAt: '2026-11-05T12:00:00Z' });
+  await insertBatch(store.id, { nature: 'Hors nouvelle période', collectedAt: '2026-11-05T12:00:00Z' });
+  await insertBatch(store.id, { nature: 'Déjà attesté', collectedAt: '2026-11-09T12:00:00Z' });
   await insertBatch(store.id, { nature: 'Nouveau lot', collectedAt: '2026-11-20T12:00:00Z' });
   const { client } = await coordinatorClient();
   await issue(client, store, { period_start: '2026-11-01', period_end: '2026-11-10' });
@@ -133,11 +136,24 @@ test('an overlapping ISSUED certificate gives a warning listing the batches alre
   assert.equal(warning.status, 200);
   assert.match(warning.body, /PS91-2026-0001/);
   assert.match(warning.body, /Déjà attesté/);
+  assert.doesNotMatch(warning.body, /Hors nouvelle période|Nouveau lot/);
   assert.equal((await certificates()).length, 1);
 
   const confirmed = await issue(client, store, { period_start: '2026-11-08', period_end: '2026-11-30' }, { confirm: '1' });
   assert.equal(confirmed.status, 303);
   assert.equal((await certificates()).length, 2);
+});
+
+test('overlapping periods without any batch in common still give a warning, saying so', async () => {
+  const store = await env.createAccount({ role: 'STORE' });
+  await insertBatch(store.id, { collectedAt: '2026-11-05T12:00:00Z' });
+  await insertBatch(store.id, { nature: 'Nouveau lot', collectedAt: '2026-11-20T12:00:00Z' });
+  const { client } = await coordinatorClient();
+  await issue(client, store, { period_start: '2026-11-01', period_end: '2026-11-10' });
+
+  const warning = await issue(client, store, { period_start: '2026-11-08', period_end: '2026-11-30' });
+  assert.equal(warning.status, 200);
+  assert.match(warning.body, /Aucun lot de cette période n’est déjà attesté/);
 });
 
 test('REPLACED certificates and other stores are ignored by the overlap warning', async () => {

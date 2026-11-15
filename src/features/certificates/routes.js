@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { requireRole } from '../../shared/access.js';
 import { isDate } from '../../shared/batch-form.js';
-import { issueCertificate, selectCollectedBatches } from '../../shared/certificates.js';
+import { issueCertificate, PERIOD_WHERE, selectCollectedBatches } from '../../shared/certificates.js';
 import { errorPage } from '../../shared/html.js';
 import { certificateFormPage, certificatePage, overlapWarningPage } from './pages.js';
 
@@ -26,19 +26,25 @@ export function certificatesRoutes({ db, clock, config }) {
     res.send(certificateFormPage({ session: req.session, stores: await readStores(), values: {}, errors: {} }));
   });
 
-  // Lots des attestations ISSUED du commerce dont la période chevauche la nouvelle (les REPLACED sont ignorées).
-  async function readOverlappingBatches({ storeId, periodStart, periodEnd }) {
-    const { rows } = await db.query(
-      `SELECT donation_certificate.number, batch.nature, ${parisLocal('batch.collected_at')} AS collected_at
-       FROM donation_certificate
-       JOIN certificate_batch ON certificate_batch.certificate_id = donation_certificate.id
-       JOIN batch ON batch.id = certificate_batch.batch_id
-       WHERE donation_certificate.store_id = $1 AND donation_certificate.status = 'ISSUED'
-         AND donation_certificate.period_start <= $3::date AND donation_certificate.period_end >= $2::date
+  // Attestations ISSUED du commerce dont la période chevauche la nouvelle (les REPLACED sont ignorées),
+  // et, parmi leurs lots, ceux de la nouvelle période : ils seraient attestés une deuxième fois.
+  async function readOverlap({ storeId, periodStart, periodEnd }) {
+    const overlapping = `donation_certificate.store_id = $1 AND donation_certificate.status = 'ISSUED'
+         AND donation_certificate.period_start <= $3::date AND donation_certificate.period_end >= $2::date`;
+    const { rows: certificates } = await db.query(
+      `SELECT number FROM donation_certificate WHERE ${overlapping} ORDER BY number`,
+      [storeId, periodStart, periodEnd],
+    );
+    const { rows: batches } = await db.query(
+      `SELECT donation_certificate.number, certificate_batch.nature, ${parisLocal('batch.collected_at')} AS collected_at
+       FROM batch
+       JOIN certificate_batch ON certificate_batch.batch_id = batch.id
+       JOIN donation_certificate ON donation_certificate.id = certificate_batch.certificate_id
+       WHERE ${PERIOD_WHERE} AND ${overlapping}
        ORDER BY donation_certificate.number, batch.collected_at, batch.id`,
       [storeId, periodStart, periodEnd],
     );
-    return rows;
+    return { numbers: certificates.map((certificate) => certificate.number), batches };
   }
 
   router.post('/certificates', coordinatorOnly, async (req, res) => {
@@ -69,8 +75,8 @@ export function certificatesRoutes({ db, clock, config }) {
     }
     // Avertissement non bloquant : la Coordination confirme avec le bouton « Produire quand même ».
     if (!req.body.confirm) {
-      const batches = await readOverlappingBatches(period);
-      if (batches.length > 0) return res.send(overlapWarningPage({ session: req.session, values, batches }));
+      const { numbers, batches } = await readOverlap(period);
+      if (numbers.length > 0) return res.send(overlapWarningPage({ session: req.session, values, numbers, batches }));
     }
 
     const issued = await db.withTransaction((client) => issueCertificate(client, {
@@ -100,7 +106,8 @@ export function certificatesRoutes({ db, clock, config }) {
     );
     if (!certificate) return res.status(404).send(errorPage(NOT_FOUND));
     const { rows: batches } = await db.query(
-      `SELECT batch.nature, batch.quantity, batch.quantity_unit, ${parisLocal('batch.collected_at')} AS collected_at,
+      `SELECT certificate_batch.nature, certificate_batch.quantity, certificate_batch.quantity_unit,
+              ${parisLocal('batch.collected_at')} AS collected_at,
               round(certificate_batch.weight_kg, 1)::text AS weight_kg,
               round(certificate_batch.value_eur, 2)::text AS value_eur
        FROM certificate_batch JOIN batch ON batch.id = certificate_batch.batch_id

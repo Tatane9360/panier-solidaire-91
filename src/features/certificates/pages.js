@@ -51,7 +51,7 @@ export function certificateFormPage({ session, stores, values, errors }) {
 }
 
 // Avertissement non bloquant : la période chevauche des attestations émises.
-export function overlapWarningPage({ session, values, batches }) {
+export function overlapWarningPage({ session, values, numbers, batches }) {
   const items = batches
     .map((batch) => `<li>${escapeHtml(batch.nature)}, collecté le ${escapeHtml(formatLocal(batch.collected_at))} (attestation ${escapeHtml(batch.number)})</li>`)
     .join('');
@@ -63,8 +63,10 @@ export function overlapWarningPage({ session, values, batches }) {
     content: `
     <h1 class="mb-6 text-2xl font-bold">Cette période a déjà été attestée</h1>
     <div role="alert" class="mb-4 border-l-4 border-amber-700 bg-amber-50 p-3 text-amber-900">
-      <p class="mb-2 font-semibold">Une attestation émise pour ce commerce chevauche cette période. Lots déjà attestés :</p>
-      <ul class="list-disc pl-5">${items}</ul>
+      <p class="mb-2 font-semibold">Cette période chevauche l’attestation émise ${escapeHtml(numbers.join(', '))} pour ce commerce.</p>
+      ${batches.length > 0
+        ? `<p class="mb-2">Lots de cette période déjà attestés :</p><ul class="list-disc pl-5">${items}</ul>`
+        : '<p>Aucun lot de cette période n’est déjà attesté.</p>'}
     </div>
     <form method="post" action="/certificates" class="mb-4">
       ${csrfField(session)}${hidden}
