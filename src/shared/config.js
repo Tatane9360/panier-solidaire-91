@@ -4,6 +4,12 @@ export function readConfig(env) {
     databaseUrl: env.DATABASE_URL,
     sessionDurationMinutes: Number(env.SESSION_DURATION_MINUTES ?? 30),
     pageSize: Number(env.PAGE_SIZE ?? 50),
+    // Identité de l'émetteur des attestations de don (le dépôt est public : valeurs dans .env).
+    issuer: {
+      name: env.ISSUER_NAME ?? 'Panier Solidaire 91',
+      address: env.ISSUER_ADDRESS,
+      registration: env.ISSUER_REGISTRATION,
+    },
     secureCookies: env.NODE_ENV === 'production',
     mailFrom: env.MAIL_FROM,
     smtp: {
