@@ -9,7 +9,7 @@ const NOT_FOUND = 'Lot introuvable.';
 const CORRECTABLE = ['DECLARED', 'RESERVED'];
 const CANCELLABLE = ['DECLARED', 'RESERVED', 'COLLECTED'];
 // Champs corrigeables, dans l'ordre des paramètres de l'UPDATE ($2, $3…).
-const FIELDS = [
+const EDITABLE_FIELDS = [
   'nature', 'quantity', 'quantity_unit', 'weight_kg', 'value_eur', 'expiry_date',
   'date_type', 'pickup_start', 'pickup_end', 'cold_requirement',
 ];
@@ -82,7 +82,7 @@ export function correctBatchRoutes({ db, clock }) {
     if (Object.keys(errors).length > 0) {
       return sendForm(res, req.session, req.params.id, { values, errors, status: 400 });
     }
-    const newValues = Object.fromEntries(FIELDS.map((field) => [
+    const newValues = Object.fromEntries(EDITABLE_FIELDS.map((field) => [
       field,
       NUMERIC_FIELDS.includes(field) ? toDecimal(values[field]) : values[field],
     ]));
@@ -91,7 +91,7 @@ export function correctBatchRoutes({ db, clock }) {
         const { rows: [batch] } = await client.query(`${SELECT_BATCH} FOR UPDATE`, [req.params.id]);
         if (!batch) throw new Refused(404, NOT_FOUND);
         if (!CORRECTABLE.includes(batch.status)) throw new Refused(409, 'Ce lot ne peut plus être corrigé.');
-        const changed = FIELDS.filter((field) => !sameValue(field, batch[field], newValues[field]));
+        const changed = EDITABLE_FIELDS.filter((field) => !sameValue(field, batch[field], newValues[field]));
         if (changed.length === 0) return;
         await client.query(
           `UPDATE batch SET nature = $2, quantity = $3, quantity_unit = $4, weight_kg = $5, value_eur = $6,
@@ -100,7 +100,7 @@ export function correctBatchRoutes({ db, clock }) {
                   pickup_end = $10::timestamp AT TIME ZONE 'Europe/Paris',
                   cold_requirement = $11
            WHERE id = $1`,
-          [batch.id, ...FIELDS.map((field) => newValues[field])],
+          [batch.id, ...EDITABLE_FIELDS.map((field) => newValues[field])],
         );
         for (const field of changed) {
           await writeHistory(client, {

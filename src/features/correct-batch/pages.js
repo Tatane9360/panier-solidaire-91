@@ -23,11 +23,11 @@ export function editBatchPage({ session, batch, values, errors, correctable, can
     ? `
     <form method="post" action="/monitoring/batches/${batch.id}/cancel" class="space-y-4">
       <h2 class="text-xl font-bold">Annuler le lot</h2>
-      ${cancelError ? `<p role="alert" class="font-semibold text-red-800">${escapeHtml(cancelError)}</p>` : ''}
+      ${cancelError ? `<p id="erreur-cancel-reason" role="alert" class="font-semibold text-red-800">${escapeHtml(cancelError)}</p>` : ''}
       ${csrfField(session)}
       <div>
         <label for="cancel-reason" class="block font-semibold">Motif (obligatoire)</label>
-        <input id="cancel-reason" name="reason" type="text" required class="mt-1 w-full rounded border border-slate-500 p-3">
+        <input id="cancel-reason" name="reason" type="text" required${cancelError ? ' aria-invalid="true" aria-describedby="erreur-cancel-reason"' : ''} class="mt-1 w-full rounded border border-slate-500 p-3">
       </div>
       <button type="submit" class="${BUTTON} bg-red-800 text-white">Annuler le lot</button>
     </form>`
@@ -36,7 +36,7 @@ export function editBatchPage({ session, batch, values, errors, correctable, can
     ? ''
     : `<p>Un lot « ${STATUS_LABELS[batch.status].toLowerCase()} » ne peut plus être modifié ni annulé.</p>`;
   return page({
-    title: summary ? 'Erreur – Corriger un lot' : 'Corriger un lot',
+    title: summary || cancelError ? 'Erreur – Corriger un lot' : 'Corriger un lot',
     content: `
     <h1 class="mb-2 text-2xl font-bold">Corriger un lot</h1>
     <p class="mb-6">Statut : <strong>${STATUS_LABELS[batch.status]}</strong></p>
