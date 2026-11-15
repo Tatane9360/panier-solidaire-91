@@ -3,11 +3,10 @@ import { requireRole } from '../../shared/access.js';
 import { writeHistory } from '../../shared/batch-history.js';
 import { isDateTime } from '../../shared/batch-form.js';
 import { errorPage, formatLocal } from '../../shared/html.js';
+import { PICKUP_CONFIRMATION_WINDOW_HOURS } from '../../shared/pickup-window.js';
 import { latePickupPage } from './pages.js';
 
 const NOT_FOUND = 'Lot introuvable.';
-// Au-delà, seule la Coordination peut enregistrer la collecte (voir reserve-batch : l'association a 24 h).
-const ASSOCIATION_WINDOW_HOURS = 24;
 
 // Plus de 9 chiffres pourrait dépasser une colonne `integer` : un tel lot n'existe pas.
 const isBatchId = (id) => /^\d{1,9}$/.test(id);
@@ -33,6 +32,19 @@ class Refused extends Error {
   }
 }
 
+// Pourquoi la collecte tardive est impossible pour ce lot, ou null si elle est possible.
+// Sans réservation active (association_name nul), un lot expiré ne devient jamais COLLECTED.
+function whyNotPossible(batch, now) {
+  if (batch.status !== 'EXPIRED' || !batch.association_name) {
+    return 'Ce lot n’est pas un lot expiré réservé : sa collecte ne peut pas être enregistrée.';
+  }
+  // Fenêtre de l'association close dès que l'horloge atteint pickup_end + 24 h.
+  if (now.getTime() < batch.pickup_end.getTime() + PICKUP_CONFIRMATION_WINDOW_HOURS * 60 * 60_000) {
+    return 'Le créneau de ce lot est terminé depuis moins de 24 h : l’association peut encore confirmer la collecte.';
+  }
+  return null;
+}
+
 // Collecte tardive d'un lot EXPIRED (Coordination), depuis le suivi.
 export function latePickupRoutes({ db, notifications, clock }) {
   const router = Router();
@@ -41,6 +53,8 @@ export function latePickupRoutes({ db, notifications, clock }) {
   async function sendForm(res, session, batchId, { values = {}, errors = {}, status = 200 }) {
     const { rows: [batch] } = await db.query(SELECT_BATCH, [batchId]);
     if (!batch) return res.status(404).send(errorPage(NOT_FOUND));
+    const refusal = whyNotPossible(batch, clock.now());
+    if (refusal) return res.status(409).send(errorPage(refusal));
     return res.status(status).send(latePickupPage({ session, batch, values, errors }));
   }
 
@@ -63,22 +77,21 @@ export function latePickupRoutes({ db, notifications, clock }) {
       result = await db.withTransaction(async (client) => {
         const { rows: [batch] } = await client.query(`${SELECT_BATCH} FOR UPDATE OF batch`, [req.params.id]);
         if (!batch) throw new Refused(404, NOT_FOUND);
-        // Sans réservation active (association_name nul), un lot expiré ne devient jamais COLLECTED.
-        if (batch.status !== 'EXPIRED' || !batch.association_name) {
-          throw new Refused(409, 'Ce lot n’est pas un lot expiré réservé : sa collecte ne peut pas être enregistrée.');
-        }
-        // Fenêtre de l'association close dès que l'horloge atteint pickup_end + 24 h.
-        if (now.getTime() < batch.pickup_end.getTime() + ASSOCIATION_WINDOW_HOURS * 60 * 60_000) {
-          throw new Refused(409, 'Le créneau de ce lot est terminé depuis moins de 24 h : l’association peut encore confirmer la collecte.');
-        }
+        const refusal = whyNotPossible(batch, now);
+        if (refusal) throw new Refused(409, refusal);
         const errors = {};
+        let instant;
+        let utc_offset;
         if (!values.reason) errors.reason = 'Le motif est obligatoire.';
         if (!isDateTime(values.collected_at)) {
           errors.collected_at = 'Date et heure invalides.';
         } else {
-          const { rows: [{ instant }] } = await client.query(
-            "SELECT $1::timestamp AT TIME ZONE 'Europe/Paris' AS instant", [values.collected_at],
-          );
+          // Paris est toujours à l'est de UTC : le décalage s'écrit avec un « + ».
+          ({ rows: [{ instant, utc_offset }] } = await client.query(
+            `SELECT $1::timestamp AT TIME ZONE 'Europe/Paris' AS instant,
+                    to_char($1::timestamp AT TIME ZONE 'UTC' - $1::timestamp AT TIME ZONE 'Europe/Paris', '"+"HH24:MI') AS utc_offset`,
+            [values.collected_at],
+          ));
           if (instant < batch.pickup_start_instant) errors.collected_at = 'La collecte ne peut pas précéder le début du créneau.';
           else if (instant > now) errors.collected_at = 'La collecte ne peut pas être dans le futur.';
         }
@@ -89,10 +102,6 @@ export function latePickupRoutes({ db, notifications, clock }) {
         const accountId = req.session.account.id;
         const history = { batchId: batch.id, accountId, changedAt: now, reason: values.reason };
         await writeHistory(client, { ...history, field: 'status', oldValue: 'EXPIRED', newValue: 'COLLECTED' });
-        // Paris est toujours à l'est de UTC : le décalage s'écrit avec un « + ».
-        const { rows: [{ utc_offset }] } = await client.query(
-          "SELECT to_char($1::timestamp AT TIME ZONE 'UTC' - $1::timestamp AT TIME ZONE 'Europe/Paris', '\"+\"HH24:MI') AS utc_offset", [values.collected_at],
-        );
         await writeHistory(client, { ...history, field: 'collected_at', oldValue: null, newValue: values.collected_at + utc_offset });
         return { batch };
       });

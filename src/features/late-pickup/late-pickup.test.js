@@ -139,3 +139,8 @@ test('unknown batch gives 404 and other profiles get 401/403', async () => {
   assert.equal((await storeClient.get(`/monitoring/batches/${batchId}/late-pickup`)).status, 403);
   assert.equal((await storeClient.post(`/monitoring/batches/${batchId}/late-pickup`, FORM)).status, 403);
 });
+
+test('the form is not shown for a batch that cannot receive a late pickup', async () => {
+  const { batchId, client } = await setup({ status: 'DECLARED', reserved: false });
+  assert.equal((await client.get(`/monitoring/batches/${batchId}/late-pickup`)).status, 409);
+});

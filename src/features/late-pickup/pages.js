@@ -25,7 +25,7 @@ export function latePickupPage({ session, batch, values, errors }) {
     ${summary}
     <form method="post" action="/monitoring/batches/${batch.id}/late-pickup" class="space-y-4">
       ${csrfField(session)}
-      ${field({ name: 'collected_at', label: 'Date et heure réelles de la collecte', type: 'datetime-local' })}
+      ${field({ name: 'collected_at', label: 'Date et heure réelles de la collecte (heure de Paris)', type: 'datetime-local' })}
       ${field({ name: 'reason', label: 'Motif', type: 'text' })}
       <button type="submit" class="w-full rounded bg-green-800 px-4 py-3 font-semibold text-white">Enregistrer la collecte</button>
     </form>
