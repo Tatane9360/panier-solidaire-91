@@ -80,7 +80,7 @@ const kg = (value) => `${escapeHtml(formatDecimal(value))} kg`;
 const euro = (value) => `${escapeHtml(formatDecimal(value))} €`;
 
 // Page imprimable : poids et valeur arrondis à l'affichage seulement (kg à 1 décimale, € à 2).
-export function certificatePage({ certificate, batches, issuer, role }) {
+export function certificatePage({ certificate, batches, issuer, backLink }) {
   const rows = batches
     .map((batch) => `
         <tr class="border-t border-slate-400">
@@ -115,7 +115,7 @@ export function certificatePage({ certificate, batches, issuer, role }) {
       <dt>Valeur totale</dt><dd class="text-right">${euro(certificate.total_value_eur)}</dd>
     </dl>
     <p class="mb-6">Émise le ${escapeHtml(formatLocal(certificate.issued_at))}.</p>
-    <p class="print:hidden"><a href="${role === 'STORE' ? '/certificates' : '/'}" class="underline">${role === 'STORE' ? 'Revenir à mes attestations' : 'Revenir à l’accueil'}</a></p>`,
+    <p class="print:hidden"><a href="${backLink.href}" class="underline">${backLink.label}</a></p>`,
   });
 }
 

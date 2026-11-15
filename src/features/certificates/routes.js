@@ -109,7 +109,7 @@ export function certificatesRoutes({ db, clock, config }) {
     if (!isId(req.params.id)) return res.status(404).send(errorPage(NOT_FOUND));
     const account = req.session.account;
     // Un commerce qui demande l'attestation d'un autre reçoit le même 404 qu'un identifiant inconnu.
-    const ownerOnly = account.role === 'STORE' ? 'AND donation_certificate.store_id = $2' : 'AND $2::int IS NULL';
+    const isStore = account.role === 'STORE';
     const { rows: [certificate] } = await db.query(
       `SELECT donation_certificate.number, donation_certificate.status, donation_certificate.replaced_by,
               replacement.number AS replaced_by_number,
@@ -121,8 +121,8 @@ export function certificatesRoutes({ db, clock, config }) {
               store.organization_name AS store_name, store.address AS store_address
        FROM donation_certificate JOIN account store ON store.id = donation_certificate.store_id
        LEFT JOIN donation_certificate replacement ON replacement.id = donation_certificate.replaced_by
-       WHERE donation_certificate.id = $1 ${ownerOnly}`,
-      [req.params.id, account.role === 'STORE' ? account.id : null],
+       WHERE donation_certificate.id = $1 ${isStore ? 'AND donation_certificate.store_id = $2' : ''}`,
+      isStore ? [req.params.id, account.id] : [req.params.id],
     );
     if (!certificate) return res.status(404).send(errorPage(NOT_FOUND));
     const { rows: batches } = await db.query(
@@ -135,7 +135,7 @@ export function certificatesRoutes({ db, clock, config }) {
        ORDER BY batch.collected_at, batch.id`,
       [req.params.id],
     );
-    return res.send(certificatePage({ certificate, batches, issuer: config.issuer, role: account.role }));
+    return res.send(certificatePage({ certificate, batches, issuer: config.issuer, backLink: isStore ? { href: '/certificates', label: 'Revenir à mes attestations' } : { href: '/', label: 'Revenir à l’accueil' } }));
   });
 
   return router;
