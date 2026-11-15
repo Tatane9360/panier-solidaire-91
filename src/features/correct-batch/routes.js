@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { requireRole } from '../../shared/access.js';
 import { readForm, toDecimal, validate } from '../../shared/batch-form.js';
+import { writeHistory } from '../../shared/batch-history.js';
 import { errorPage } from '../../shared/html.js';
 import { releaseReservation } from '../../shared/reservations.js';
 import { editBatchPage } from './pages.js';
@@ -64,15 +65,6 @@ export function correctBatchRoutes({ db, clock }) {
     }));
   }
 
-  // Une ligne par champ modifié, dans la transaction de l'opération.
-  function writeHistory(client, { batchId, accountId, field, oldValue, newValue, reason }) {
-    return client.query(
-      `INSERT INTO batch_history (batch_id, changed_by, changed_at, field, old_value, new_value, reason)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [batchId, accountId, clock.now(), field, oldValue, newValue, reason || null],
-    );
-  }
-
   router.get('/monitoring/batches/:id/edit', coordinatorOnly, (req, res) => {
     if (!isBatchId(req.params.id)) return res.status(404).send(errorPage(NOT_FOUND));
     return sendForm(res, req.session, req.params.id, {});
@@ -121,6 +113,7 @@ export function correctBatchRoutes({ db, clock }) {
         const { rows: [updated] } = await client.query(SELECT_BATCH, [batch.id]);
         for (const field of changed) {
           await writeHistory(client, {
+            changedAt: clock.now(),
             batchId: batch.id, accountId: req.session.account.id, field,
             oldValue: batch[`${field}_instant`] ?? batch[field],
             newValue: updated[`${field}_instant`] ?? newValues[field],
@@ -159,6 +152,7 @@ export function correctBatchRoutes({ db, clock }) {
         }
         await client.query("UPDATE batch SET status = 'CANCELLED' WHERE id = $1", [batch.id]);
         await writeHistory(client, {
+          changedAt: clock.now(),
           batchId: batch.id, accountId, field: 'status', oldValue: batch.status, newValue: 'CANCELLED', reason,
         });
       });

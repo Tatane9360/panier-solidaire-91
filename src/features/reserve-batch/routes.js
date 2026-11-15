@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { requireRole } from '../../shared/access.js';
 import { COLD_LABELS, formatLocal } from '../../shared/html.js';
+import { PICKUP_CONFIRMATION_WINDOW_HOURS } from '../../shared/pickup-window.js';
 import { releaseReservation } from '../../shared/reservations.js';
 import {
   availableBatchesPage, coldCapacityPage, reservationRefusedPage, reservationsPage, cancellationRefusedPage, collectionRefusedPage,
@@ -23,9 +24,6 @@ class BatchActionRefused extends Error {
 // Prénom du bénévole manquant. Levée après les contrôles d'accès et d'état du lot :
 // une association qui n'a pas le droit d'agir sur ce lot reçoit d'abord ce refus-là.
 class MissingVolunteerName extends Error {}
-
-// Fenêtre de confirmation de la collecte après la fin du créneau.
-const PICKUP_CONFIRMATION_WINDOW_HOURS = 24;
 
 // Consulter les lots disponibles, les réserver, annuler sa réservation
 // et déclarer sa capacité de froid (association).

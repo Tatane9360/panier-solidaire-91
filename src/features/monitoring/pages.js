@@ -106,8 +106,13 @@ export function monitoringPage({ batches, filters, stores, associations, total, 
   });
 }
 
-// Corriger ou annuler : possible tant que le lot n'est ni expiré ni annulé.
+// Corriger ou annuler tant que le lot n'est ni expiré ni annulé ;
+// un lot expiré avec réservation active peut encore recevoir une collecte tardive.
 function actions(batch) {
+  const label = `<span class="sr-only"> le lot ${escapeHtml(batch.nature)}</span>`;
+  if (batch.status === 'EXPIRED' && batch.association_name) {
+    return `<a href="/monitoring/batches/${batch.id}/late-pickup" class="underline">Enregistrer une collecte tardive${label}</a>`;
+  }
   if (['EXPIRED', 'CANCELLED'].includes(batch.status)) return '—';
-  return `<a href="/monitoring/batches/${batch.id}/edit" class="underline">Corriger ou annuler<span class="sr-only"> le lot ${escapeHtml(batch.nature)}</span></a>`;
+  return `<a href="/monitoring/batches/${batch.id}/edit" class="underline">Corriger ou annuler${label}</a>`;
 }
