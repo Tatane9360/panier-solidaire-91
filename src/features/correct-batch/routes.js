@@ -21,11 +21,15 @@ const isBatchId = (id) => /^\d{1,9}$/.test(id);
 
 const parisLocal = (column) => `to_char(${column} AT TIME ZONE 'Europe/Paris', 'YYYY-MM-DD"T"HH24:MI')`;
 
+// Instant sans ambiguïté pour l'historique : heure de Paris + décalage (Paris est toujours à l'est de UTC).
+const parisInstant = (column) => `${parisLocal(column)} || to_char(${column} AT TIME ZONE 'Europe/Paris' - ${column} AT TIME ZONE 'UTC', '"+"HH24:MI')`;
+
 // Lot avec ses champs au format du formulaire (créneau en heure de Paris).
 const SELECT_BATCH = `
   SELECT id, nature, quantity::text, quantity_unit, weight_kg::text, value_eur::text,
          to_char(expiry_date, 'YYYY-MM-DD') AS expiry_date, date_type,
          ${parisLocal('pickup_start')} AS pickup_start, ${parisLocal('pickup_end')} AS pickup_end,
+         ${parisInstant('pickup_start')} AS pickup_start_instant, ${parisInstant('pickup_end')} AS pickup_end_instant,
          cold_requirement, status
   FROM batch WHERE id = $1`;
 
@@ -74,25 +78,37 @@ export function correctBatchRoutes({ db, clock }) {
     return sendForm(res, req.session, req.params.id, {});
   });
 
+  // Le statut est vérifié avant la saisie : un lot non modifiable donne 409, même avec une saisie invalide.
   router.post('/monitoring/batches/:id/edit', coordinatorOnly, async (req, res) => {
     if (!isBatchId(req.params.id)) return res.status(404).send(errorPage(NOT_FOUND));
     const values = readForm(req.body);
     values.reason = String(req.body.reason ?? '').trim();
-    const errors = validate(values, clock.now());
-    if (Object.keys(errors).length > 0) {
-      return sendForm(res, req.session, req.params.id, { values, errors, status: 400 });
-    }
     const newValues = Object.fromEntries(EDITABLE_FIELDS.map((field) => [
       field,
       NUMERIC_FIELDS.includes(field) ? toDecimal(values[field]) : values[field],
     ]));
+    let errors;
     try {
-      await db.withTransaction(async (client) => {
+      errors = await db.withTransaction(async (client) => {
         const { rows: [batch] } = await client.query(`${SELECT_BATCH} FOR UPDATE`, [req.params.id]);
         if (!batch) throw new Refused(404, NOT_FOUND);
         if (!CORRECTABLE.includes(batch.status)) throw new Refused(409, 'Ce lot ne peut plus être corrigé.');
+        const formErrors = validate(values, clock.now());
+        if (Object.keys(formErrors).length > 0) return formErrors;
+        if (batch.status === 'RESERVED' && newValues.cold_requirement !== batch.cold_requirement) {
+          // Froid incompatible = refus bloquant : l'association réservataire doit savoir le respecter.
+          const { rows: [reservation] } = await client.query(
+            `SELECT $2 = ANY (association.cold_capacity) AS compatible
+             FROM reservation JOIN account association ON association.id = reservation.association_id
+             WHERE reservation.batch_id = $1 AND reservation.cancelled_at IS NULL`,
+            [batch.id, newValues.cold_requirement],
+          );
+          if (!reservation?.compatible) {
+            throw new Refused(409, 'Ce niveau de froid est incompatible avec l’association qui a réservé le lot : annulez le lot pour le changer.');
+          }
+        }
         const changed = EDITABLE_FIELDS.filter((field) => !sameValue(field, batch[field], newValues[field]));
-        if (changed.length === 0) return;
+        if (changed.length === 0) return {};
         await client.query(
           `UPDATE batch SET nature = $2, quantity = $3, quantity_unit = $4, weight_kg = $5, value_eur = $6,
                   expiry_date = $7, date_type = $8,
@@ -102,16 +118,23 @@ export function correctBatchRoutes({ db, clock }) {
            WHERE id = $1`,
           [batch.id, ...EDITABLE_FIELDS.map((field) => newValues[field])],
         );
+        const { rows: [updated] } = await client.query(SELECT_BATCH, [batch.id]);
         for (const field of changed) {
           await writeHistory(client, {
             batchId: batch.id, accountId: req.session.account.id, field,
-            oldValue: batch[field], newValue: newValues[field], reason: values.reason,
+            oldValue: batch[`${field}_instant`] ?? batch[field],
+            newValue: updated[`${field}_instant`] ?? newValues[field],
+            reason: values.reason,
           });
         }
+        return {};
       });
     } catch (error) {
       if (!(error instanceof Refused)) throw error;
       return res.status(error.status).send(errorPage(error.message));
+    }
+    if (Object.keys(errors).length > 0) {
+      return sendForm(res, req.session, req.params.id, { values, errors, status: 400 });
     }
     return res.redirect(303, '/monitoring/batches');
   });
@@ -119,15 +142,17 @@ export function correctBatchRoutes({ db, clock }) {
   router.post('/monitoring/batches/:id/cancel', coordinatorOnly, async (req, res) => {
     if (!isBatchId(req.params.id)) return res.status(404).send(errorPage(NOT_FOUND));
     const reason = String(req.body.reason ?? '').trim();
-    if (!reason) {
-      return sendForm(res, req.session, req.params.id, { cancelError: 'Le motif est obligatoire.', status: 400 });
-    }
+    let missingReason = false;
     try {
       await db.withTransaction(async (client) => {
         // Même verrou FOR UPDATE que la réservation : annulation et réservation ne se croisent pas.
         const { rows: [batch] } = await client.query(`${SELECT_BATCH} FOR UPDATE`, [req.params.id]);
         if (!batch) throw new Refused(404, NOT_FOUND);
         if (!CANCELLABLE.includes(batch.status)) throw new Refused(409, 'Ce lot ne peut plus être annulé.');
+        if (!reason) {
+          missingReason = true;
+          return;
+        }
         const accountId = req.session.account.id;
         if (batch.status === 'RESERVED') {
           await releaseReservation(client, { batchId: batch.id, cancelledBy: accountId, now: clock.now() });
@@ -140,6 +165,9 @@ export function correctBatchRoutes({ db, clock }) {
     } catch (error) {
       if (!(error instanceof Refused)) throw error;
       return res.status(error.status).send(errorPage(error.message));
+    }
+    if (missingReason) {
+      return sendForm(res, req.session, req.params.id, { cancelError: 'Le motif est obligatoire.', status: 400 });
     }
     return res.redirect(303, '/monitoring/batches');
   });

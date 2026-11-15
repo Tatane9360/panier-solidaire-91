@@ -173,3 +173,76 @@ test('only the coordination can correct or cancel', async () => {
   assert.equal((await client.post(`/monitoring/batches/${batchId}/cancel`, { reason: 'Test' })).status, 403);
   assert.equal((await env.db.query('SELECT status FROM batch WHERE id = $1', [batchId])).rows[0].status, 'DECLARED');
 });
+
+test('the status is checked before the input: an EXPIRED batch gives 409 even with invalid input', async () => {
+  const store = await env.createAccount({ role: 'STORE' });
+  const batchId = await insertBatch(store.id, 'EXPIRED');
+  const { client } = await coordinatorClient();
+
+  assert.equal((await client.post(`/monitoring/batches/${batchId}/edit`, { ...CORRECTED, weight_kg: '0' })).status, 409);
+  assert.equal((await client.post(`/monitoring/batches/${batchId}/cancel`, { reason: '' })).status, 409);
+});
+
+test('changing the cold requirement of a RESERVED batch is refused if the association cannot keep it', async () => {
+  const store = await env.createAccount({ role: 'STORE' });
+  const association = await env.createAccount({ role: 'ASSOCIATION', cold_capacity: ['AMBIENT', 'CHILLED'] });
+  const batchId = await insertBatch(store.id, 'RESERVED');
+  await reserve(batchId, association.id);
+  const { client } = await coordinatorClient();
+
+  const refused = await client.post(`/monitoring/batches/${batchId}/edit`, { ...CORRECTED, cold_requirement: 'FROZEN' });
+  assert.equal(refused.status, 409);
+  assert.match(refused.body, /incompatible avec l’association/);
+  assert.deepEqual(await history(batchId), []);
+
+  const accepted = await client.post(`/monitoring/batches/${batchId}/edit`, { ...CORRECTED, cold_requirement: 'CHILLED' });
+  assert.equal(accepted.status, 303);
+  assert.equal((await history(batchId))[0].new_value, 'CHILLED');
+});
+
+test('history keeps the pickup slot as an instant with its offset', async () => {
+  const store = await env.createAccount({ role: 'STORE' });
+  const batchId = await insertBatch(store.id);
+  const { client } = await coordinatorClient();
+
+  await client.post(`/monitoring/batches/${batchId}/edit`, { ...CORRECTED, pickup_end: '2026-11-03T19:00' });
+  const line = (await history(batchId)).find((entry) => entry.field === 'pickup_end');
+  assert.deepEqual(
+    [line.field, line.old_value, line.new_value],
+    ['pickup_end', '2026-11-03T18:00+01:00', '2026-11-03T19:00+01:00'],
+  );
+});
+
+test('cancelling while an association reserves leaves a CANCELLED batch without active reservation', async () => {
+  const store = await env.createAccount({ role: 'STORE' });
+  const association = await env.createAccount({ role: 'ASSOCIATION' });
+  const batchId = await insertBatch(store.id);
+  const { client: coordinator } = await coordinatorClient();
+  const associationClient = env.client();
+  await associationClient.login(association.email, association.password);
+  await associationClient.get('/cold-capacity');
+
+  // Le lot est verrouillé : les deux requêtes attendent, puis passent l'une après l'autre.
+  let release;
+  const released = new Promise((resolve) => { release = resolve; });
+  const holding = env.db.withTransaction(async (lockClient) => {
+    await lockClient.query('SELECT id FROM batch WHERE id = $1 FOR UPDATE', [batchId]);
+    await released;
+  });
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  const pending = Promise.all([
+    coordinator.post(`/monitoring/batches/${batchId}/cancel`, { reason: 'Doublon' }),
+    associationClient.post(`/batches/${batchId}/reserve`, { reserved_by_name: 'Karim' }),
+  ]);
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  release();
+  await holding;
+  await pending;
+
+  assert.equal((await env.db.query('SELECT status FROM batch WHERE id = $1', [batchId])).rows[0].status, 'CANCELLED');
+  const { rows: [{ count }] } = await env.db.query(
+    'SELECT count(*)::int AS count FROM reservation WHERE batch_id = $1 AND cancelled_at IS NULL',
+    [batchId],
+  );
+  assert.equal(count, 0);
+});
