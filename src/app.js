@@ -6,6 +6,7 @@ import { accountsRoutes } from './features/accounts/routes.js';
 import { declareBatchRoutes } from './features/declare-batch/routes.js';
 import { reserveBatchRoutes } from './features/reserve-batch/routes.js';
 import { monitoringRoutes } from './features/monitoring/routes.js';
+import { correctBatchRoutes } from './features/correct-batch/routes.js';
 
 const publicDir = fileURLToPath(new URL('../public/', import.meta.url));
 
@@ -21,5 +22,6 @@ export function buildApp({ db, notifications, clock, config }) {
   app.use(declareBatchRoutes({ db, notifications, clock }));
   app.use(reserveBatchRoutes({ db, notifications, clock }));
   app.use(monitoringRoutes({ db, config }));
+  app.use(correctBatchRoutes({ db, clock }));
   return app;
 }

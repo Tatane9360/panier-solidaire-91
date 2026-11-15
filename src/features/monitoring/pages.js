@@ -80,6 +80,7 @@ export function monitoringPage({ batches, filters, stores, associations, total, 
           <td class="p-2">${escapeHtml(batch.store_name)}</td>
           <td class="p-2">${batch.association_name ? escapeHtml(batch.association_name) : '—'}</td>
           <td class="p-2">${keyDates(batch)}</td>
+          <td class="p-2">${actions(batch)}</td>
         </tr>`)
     .join('');
   const table = batches.length === 0
@@ -88,7 +89,7 @@ export function monitoringPage({ batches, filters, stores, associations, total, 
     <table class="w-full text-left">
       <caption class="mb-2 text-left font-semibold">${total} lot${total > 1 ? 's' : ''}</caption>
       <thead>
-        <tr><th scope="col" class="p-2">Nature</th><th scope="col" class="p-2">Statut</th><th scope="col" class="p-2">Commerce</th><th scope="col" class="p-2">Association</th><th scope="col" class="p-2">Dates clés</th></tr>
+        <tr><th scope="col" class="p-2">Nature</th><th scope="col" class="p-2">Statut</th><th scope="col" class="p-2">Commerce</th><th scope="col" class="p-2">Association</th><th scope="col" class="p-2">Dates clés</th><th scope="col" class="p-2">Actions</th></tr>
       </thead>
       <tbody>${rows}
       </tbody>
@@ -103,4 +104,10 @@ export function monitoringPage({ batches, filters, stores, associations, total, 
     ${pagination({ filters, pageNumber, pageCount })}
     <p class="mt-6"><a href="/" class="underline">Revenir à l’accueil</a></p>`,
   });
+}
+
+// Corriger ou annuler : possible tant que le lot n'est ni expiré ni annulé.
+function actions(batch) {
+  if (['EXPIRED', 'CANCELLED'].includes(batch.status)) return '—';
+  return `<a href="/monitoring/batches/${batch.id}/edit" class="underline">Corriger ou annuler<span class="sr-only"> le lot ${escapeHtml(batch.nature)}</span></a>`;
 }
