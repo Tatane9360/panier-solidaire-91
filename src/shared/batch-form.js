@@ -70,7 +70,7 @@ function isDate(value) {
 }
 
 // "2026-11-03T14:00", format envoyé par <input type="datetime-local">.
-function isDateTime(value) {
+export function isDateTime(value) {
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) return false;
   const date = new Date(`${value}:00Z`);
   return !Number.isNaN(date.getTime()) && date.toISOString().startsWith(value);
