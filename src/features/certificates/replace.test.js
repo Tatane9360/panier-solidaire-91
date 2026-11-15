@@ -71,6 +71,8 @@ test('cancelling a certified batch warns first and changes nothing until the coo
   // L'ancienne attestation n'est jamais modifiée : mêmes lots, même total.
   assert.deepEqual(await frozenBatches(old.id), [kept, cancelled]);
   assert.equal(Number(old.total_weight_kg), 20);
+  assert.equal(Number((await env.db.query('SELECT total_value_eur FROM donation_certificate WHERE id = $1', [old.id])).rows[0].total_value_eur), 40);
+  assert.equal((await env.db.query('SELECT count(*)::int AS n FROM certificate_batch WHERE certificate_id = $1 AND weight_kg = 10 AND value_eur = 20', [old.id])).rows[0].n, 2);
 });
 
 test('a late pickup inside the period of an issued certificate replaces it, and the store still reads the old one', async () => {

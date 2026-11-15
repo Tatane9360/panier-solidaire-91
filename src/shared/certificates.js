@@ -97,6 +97,8 @@ async function findStaleCertificates(client, storeId) {
 // Sans confirmation, lève ReplacementNeeded. Avec confirmation, chaque attestation touchée passe REPLACED
 // (replaced_by = la nouvelle) ; s'il ne reste aucun lot, elle passe REPLACED sans remplaçante.
 export async function replaceStaleCertificates(client, { storeId, confirmed, issuedBy, now }) {
+  // Même verrou que l'émission, pris avant la détection : deux opérations simultanées ne remplacent pas deux fois la même attestation.
+  await client.query('SELECT pg_advisory_xact_lock($1)', [ISSUE_LOCK_KEY]);
   const stale = await findStaleCertificates(client, storeId);
   if (stale.length === 0) return;
   if (!confirmed) throw new ReplacementNeeded(stale);
