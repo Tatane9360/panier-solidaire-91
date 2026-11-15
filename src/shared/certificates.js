@@ -60,3 +60,55 @@ export async function issueCertificate(client, { storeId, periodStart, periodEnd
   }
   return { id, number };
 }
+
+// Levée quand une opération change des attestations émises et que la Coordination n'a pas encore
+// confirmé : la transaction est annulée, la route affiche l'avertissement.
+export class ReplacementNeeded extends Error {
+  constructor(certificates) {
+    super('Des attestations émises seraient changées.');
+    this.certificates = certificates;
+  }
+}
+
+// Une attestation dit la même chose que les lots : mêmes lots, même poids, même valeur.
+const signature = (rows) => rows.map((row) => `${row.batch_id ?? row.id}:${Number(row.weight_kg)}:${Number(row.value_eur)}`).sort().join('|');
+
+// Attestations ISSUED du commerce dont le contenu figé ne correspond plus aux lots collectés de leur période.
+async function findStaleCertificates(client, storeId) {
+  const { rows: issued } = await client.query(
+    `SELECT id, number, to_char(period_start, 'YYYY-MM-DD') AS period_start, to_char(period_end, 'YYYY-MM-DD') AS period_end
+     FROM donation_certificate WHERE store_id = $1 AND status = 'ISSUED' ORDER BY id`,
+    [storeId],
+  );
+  const stale = [];
+  for (const certificate of issued) {
+    const { rows: frozen } = await client.query(
+      'SELECT batch_id, weight_kg, value_eur FROM certificate_batch WHERE certificate_id = $1', [certificate.id],
+    );
+    const current = await selectCollectedBatches(client, {
+      storeId, periodStart: certificate.period_start, periodEnd: certificate.period_end,
+    });
+    if (signature(frozen) !== signature(current)) stale.push(certificate);
+  }
+  return stale;
+}
+
+// « Annule et remplace » : à appeler dans la transaction de l'opération, une fois le changement écrit.
+// Sans confirmation, lève ReplacementNeeded. Avec confirmation, chaque attestation touchée passe REPLACED
+// (replaced_by = la nouvelle) ; s'il ne reste aucun lot, elle passe REPLACED sans remplaçante.
+export async function replaceStaleCertificates(client, { storeId, confirmed, issuedBy, now }) {
+  // Même verrou que l'émission, pris avant la détection : deux opérations simultanées ne remplacent pas deux fois la même attestation.
+  await client.query('SELECT pg_advisory_xact_lock($1)', [ISSUE_LOCK_KEY]);
+  const stale = await findStaleCertificates(client, storeId);
+  if (stale.length === 0) return;
+  if (!confirmed) throw new ReplacementNeeded(stale);
+  for (const old of stale) {
+    const replacement = await issueCertificate(client, {
+      storeId, periodStart: old.period_start, periodEnd: old.period_end, issuedBy, now,
+    });
+    await client.query(
+      "UPDATE donation_certificate SET status = 'REPLACED', replaced_by = $2 WHERE id = $1",
+      [old.id, replacement?.id ?? null],
+    );
+  }
+}
