@@ -3,7 +3,7 @@ import { requireRole } from '../../shared/access.js';
 import { isDate } from '../../shared/batch-form.js';
 import { issueCertificate, PERIOD_WHERE, selectCollectedBatches } from '../../shared/certificates.js';
 import { errorPage } from '../../shared/html.js';
-import { certificateFormPage, certificatePage, overlapWarningPage } from './pages.js';
+import { certificateFormPage, certificatePage, certificatesListPage, overlapWarningPage } from './pages.js';
 
 const NOT_FOUND = 'Attestation introuvable.';
 const NO_BATCH = 'Aucun lot collecté pour ce commerce dans cette période.';
@@ -17,6 +17,8 @@ const parisLocal = (column) => `to_char(${column} AT TIME ZONE 'Europe/Paris', '
 export function certificatesRoutes({ db, clock, config }) {
   const router = Router();
   const coordinatorOnly = requireRole('COORDINATOR');
+  const storeOnly = requireRole('STORE');
+  const coordinatorOrStore = requireRole('COORDINATOR', 'STORE');
 
   const readStores = async () => (await db.query(
     "SELECT id, organization_name FROM account WHERE role = 'STORE' ORDER BY organization_name, id",
@@ -90,10 +92,27 @@ export function certificatesRoutes({ db, clock, config }) {
     return res.redirect(303, `/certificates/${issued.id}`);
   });
 
-  router.get('/certificates/:id', coordinatorOnly, async (req, res) => {
+  // Le Commerce ne voit que ses attestations (REPLACED comprises).
+  router.get('/certificates', storeOnly, async (req, res) => {
+    const { rows } = await db.query(
+      `SELECT id, number, status,
+              to_char(period_start, 'YYYY-MM-DD') AS period_start,
+              to_char(period_end, 'YYYY-MM-DD') AS period_end,
+              ${parisLocal('issued_at')} AS issued_at
+       FROM donation_certificate WHERE store_id = $1 ORDER BY issued_at DESC, id DESC`,
+      [req.session.account.id],
+    );
+    res.send(certificatesListPage({ certificates: rows }));
+  });
+
+  router.get('/certificates/:id', coordinatorOrStore, async (req, res) => {
     if (!isId(req.params.id)) return res.status(404).send(errorPage(NOT_FOUND));
+    const account = req.session.account;
+    // Un commerce qui demande l'attestation d'un autre reçoit le même 404 qu'un identifiant inconnu.
+    const isStore = account.role === 'STORE';
     const { rows: [certificate] } = await db.query(
-      `SELECT donation_certificate.number, donation_certificate.status,
+      `SELECT donation_certificate.number, donation_certificate.status, donation_certificate.replaced_by,
+              replacement.number AS replaced_by_number,
               round(donation_certificate.total_weight_kg, 1)::text AS total_weight_kg,
               round(donation_certificate.total_value_eur, 2)::text AS total_value_eur,
               to_char(donation_certificate.period_start, 'YYYY-MM-DD') AS period_start,
@@ -101,8 +120,9 @@ export function certificatesRoutes({ db, clock, config }) {
               ${parisLocal('donation_certificate.issued_at')} AS issued_at,
               store.organization_name AS store_name, store.address AS store_address
        FROM donation_certificate JOIN account store ON store.id = donation_certificate.store_id
-       WHERE donation_certificate.id = $1`,
-      [req.params.id],
+       LEFT JOIN donation_certificate replacement ON replacement.id = donation_certificate.replaced_by
+       WHERE donation_certificate.id = $1 ${isStore ? 'AND donation_certificate.store_id = $2' : ''}`,
+      isStore ? [req.params.id, account.id] : [req.params.id],
     );
     if (!certificate) return res.status(404).send(errorPage(NOT_FOUND));
     const { rows: batches } = await db.query(
@@ -115,7 +135,7 @@ export function certificatesRoutes({ db, clock, config }) {
        ORDER BY batch.collected_at, batch.id`,
       [req.params.id],
     );
-    return res.send(certificatePage({ certificate, batches, issuer: config.issuer }));
+    return res.send(certificatePage({ certificate, batches, issuer: config.issuer, backLink: isStore ? { href: '/certificates', label: 'Revenir à mes attestations' } : { href: '/', label: 'Revenir à l’accueil' } }));
   });
 
   return router;

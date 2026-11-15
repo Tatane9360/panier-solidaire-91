@@ -80,7 +80,7 @@ const kg = (value) => `${escapeHtml(formatDecimal(value))} kg`;
 const euro = (value) => `${escapeHtml(formatDecimal(value))} €`;
 
 // Page imprimable : poids et valeur arrondis à l'affichage seulement (kg à 1 décimale, € à 2).
-export function certificatePage({ certificate, batches, issuer }) {
+export function certificatePage({ certificate, batches, issuer, backLink }) {
   const rows = batches
     .map((batch) => `
         <tr class="border-t border-slate-400">
@@ -98,6 +98,7 @@ export function certificatePage({ certificate, batches, issuer }) {
     content: `
     <h1 class="mb-1 text-2xl font-bold">Attestation de don</h1>
     <p class="mb-6 text-lg">N° ${escapeHtml(certificate.number)}</p>
+    ${certificate.status === 'REPLACED' ? `<p role="note" class="mb-6 border-l-4 border-amber-700 bg-amber-50 p-3 text-amber-900">Attestation remplacée${certificate.replaced_by ? ` par <a href="/certificates/${certificate.replaced_by}" class="underline">l’attestation ${escapeHtml(certificate.replaced_by_number)}</a>` : ''}.</p>` : ''}
     <div class="mb-6 grid gap-6 sm:grid-cols-2">
       <section><h2 class="font-bold">Émetteur</h2><p>${escapeHtml(issuer.name)}${issuerLines}</p></section>
       <section><h2 class="font-bold">Donateur</h2><p>${escapeHtml(certificate.store_name)}<br>${escapeHtml(certificate.store_address)}</p></section>
@@ -114,6 +115,31 @@ export function certificatePage({ certificate, batches, issuer }) {
       <dt>Valeur totale</dt><dd class="text-right">${euro(certificate.total_value_eur)}</dd>
     </dl>
     <p class="mb-6">Émise le ${escapeHtml(formatLocal(certificate.issued_at))}.</p>
-    <p class="print:hidden"><a href="/" class="underline">Revenir à l’accueil</a></p>`,
+    <p class="print:hidden"><a href="${backLink.href}" class="underline">${backLink.label}</a></p>`,
+  });
+}
+
+// Liste du Commerce : numéro, période, date d'émission.
+export function certificatesListPage({ certificates }) {
+  const rows = certificates
+    .map((certificate) => `
+        <tr class="border-t border-slate-400">
+          <td class="p-2"><a href="/certificates/${certificate.id}" class="underline">${escapeHtml(certificate.number)}</a>${certificate.status === 'REPLACED' ? ' (remplacée)' : ''}</td>
+          <td class="p-2">du ${escapeHtml(formatLocal(certificate.period_start))} au ${escapeHtml(formatLocal(certificate.period_end))}</td>
+          <td class="p-2">${escapeHtml(formatLocal(certificate.issued_at))}</td>
+        </tr>`)
+    .join('');
+  return page({
+    title: 'Mes attestations de don',
+    content: `
+    <h1 class="mb-6 text-2xl font-bold">Mes attestations de don</h1>
+    ${certificates.length === 0 ? '<p class="mb-6">Aucune attestation n’a encore été émise pour votre commerce.</p>' : `
+    <table class="mb-6 w-full text-left">
+      <caption class="sr-only">Attestations émises</caption>
+      <thead><tr><th scope="col" class="p-2">Numéro</th><th scope="col" class="p-2">Période</th><th scope="col" class="p-2">Émise le</th></tr></thead>
+      <tbody>${rows}
+      </tbody>
+    </table>`}
+    <p><a href="/" class="underline">Revenir à l’accueil</a></p>`,
   });
 }

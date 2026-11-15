@@ -221,7 +221,8 @@ test('only the coordination can issue or read a certificate', async () => {
     await other.login(account.email, account.password);
     await other.get('/');
     assert.equal((await other.get('/certificates/new')).status, 403);
-    assert.equal((await other.get(location)).status, 403);
+    // Un commerce peut lire sa propre attestation (ticket #16) : seule l'association est refusée ici.
+    if (account.role !== 'STORE') assert.equal((await other.get(location)).status, 403);
     assert.equal((await other.post('/certificates', { store_id: store.id, ...NOVEMBER })).status, 403);
   }
   assert.equal((await certificates()).length, 1);
@@ -240,4 +241,63 @@ test('period bounds follow Paris summer time (UTC+2): July 1st 00:00 is included
   assert.match(body, /Début juillet/);
   assert.match(body, /Fin juillet/);
   assert.doesNotMatch(body, /Fin juin|Début août/);
+});
+
+async function loggedInClient(store) {
+  const client = env.client();
+  await client.login(store.email, store.password);
+  await client.get('/');
+  return client;
+}
+
+test('a store lists and prints its own certificates, never those of another store', async () => {
+  const store = await env.createAccount({ role: 'STORE', organization_name: 'Primeur du Marché' });
+  const other = await env.createAccount({ role: 'STORE', organization_name: 'Boulangerie Voisine' });
+  await insertBatch(store.id, { nature: 'Pain à moi' });
+  await insertBatch(other.id, { nature: 'Pain des autres' });
+  const { client } = await coordinatorClient();
+  const mine = (await issue(client, store)).location;
+  const theirs = (await issue(client, other)).location;
+
+  const storeSession = await loggedInClient(store);
+  const list = await storeSession.get('/certificates');
+  assert.equal(list.status, 200);
+  assert.match(list.body, /PS91-2026-0001/);
+  assert.match(list.body, new RegExp(`href="${mine}"`));
+  assert.doesNotMatch(list.body, /PS91-2026-0002/);
+
+  const own = await storeSession.get(mine);
+  assert.equal(own.status, 200);
+  assert.match(own.body, /Pain à moi/);
+  // Même réponse que pour un identifiant inexistant : on ne révèle pas l'existence.
+  const foreign = await storeSession.get(theirs);
+  assert.equal(foreign.status, 404);
+  assert.equal(foreign.body, (await storeSession.get('/certificates/999')).body);
+});
+
+test('the certificate list is for stores only', async () => {
+  assert.equal((await env.client().get('/certificates')).status, 303);
+  const { client } = await coordinatorClient();
+  assert.equal((await client.get('/certificates')).status, 403);
+  const association = await env.createAccount({ role: 'ASSOCIATION' });
+  assert.equal((await (await loggedInClient(association)).get('/certificates')).status, 403);
+});
+
+test('a REPLACED certificate stays readable, marked replaced, with a link to its replacement', async () => {
+  const store = await env.createAccount({ role: 'STORE' });
+  await insertBatch(store.id);
+  const { client } = await coordinatorClient();
+  const oldLocation = (await issue(client, store)).location;
+  const newLocation = (await issue(client, store, NOVEMBER, { confirm: 1 })).location;
+  const oldId = oldLocation.split('/').pop();
+  const newId = newLocation.split('/').pop();
+  await env.db.query("UPDATE donation_certificate SET status = 'REPLACED', replaced_by = $2 WHERE id = $1", [oldId, newId]);
+
+  const session = await loggedInClient(store);
+  const page = await session.get(oldLocation);
+  assert.equal(page.status, 200);
+  assert.match(page.body, /remplacée/);
+  assert.match(page.body, new RegExp(`href="${newLocation}"`));
+  assert.match((await session.get('/certificates')).body, /remplacée/);
+  assert.doesNotMatch((await session.get(newLocation)).body, /remplacée/);
 });
