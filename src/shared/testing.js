@@ -22,7 +22,7 @@ export async function setupTestApp({ config = {}, extend } = {}) {
     db,
     notifications,
     clock,
-    config: { sessionDurationMinutes: 30, secureCookies: false, vapid: { publicKey: TEST_VAPID_PUBLIC_KEY }, ...config },
+    config: { sessionDurationMinutes: 30, pageSize: 50, secureCookies: false, vapid: { publicKey: TEST_VAPID_PUBLIC_KEY }, ...config },
   });
   // Permet à un test d'ajouter une route, par exemple pour vérifier un contrôle d'accès.
   if (extend) extend(app);

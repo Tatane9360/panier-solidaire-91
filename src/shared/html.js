@@ -8,6 +8,14 @@ export function escapeHtml(value) {
     .replaceAll("'", '&#39;');
 }
 
+export const STATUS_LABELS = {
+  DECLARED: 'Déclaré',
+  RESERVED: 'Réservé',
+  COLLECTED: 'Collecté',
+  CANCELLED: 'Annulé',
+  EXPIRED: 'Expiré',
+};
+
 export const COLD_LABELS = { AMBIENT: 'Ambiant', CHILLED: 'Frais', FROZEN: 'Surgelé' };
 
 // "2026-11-03T14:00" → "03/11/2026 14:00" ; "2026-11-05" → "05/11/2026".
@@ -34,7 +42,8 @@ export function errorPage(message) {
 }
 
 // Gabarit commun. `title` est du texte, `content` du HTML déjà échappé.
-export function page({ title, content }) {
+// `wide` élargit la colonne, pour les tableaux de la Coordination sur ordinateur.
+export function page({ title, content, wide = false }) {
   return `<!doctype html>
 <html lang="fr">
 <head>
@@ -50,7 +59,7 @@ export function page({ title, content }) {
   <header class="border-b border-slate-300 px-4 py-3">
     <p class="font-bold">Panier Solidaire 91</p>
   </header>
-  <main id="contenu" class="mx-auto max-w-2xl px-4 py-6">
+  <main id="contenu" class="mx-auto ${wide ? 'max-w-6xl' : 'max-w-2xl'} px-4 py-6">
 ${content}
   </main>
 </body>
