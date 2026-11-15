@@ -6,6 +6,7 @@ import { errorPage } from '../../shared/html.js';
 import { certificateFormPage, certificatePage, overlapWarningPage } from './pages.js';
 
 const NOT_FOUND = 'Attestation introuvable.';
+const NO_BATCH = 'Aucun lot collecté pour ce commerce dans cette période.';
 
 // Plus de 9 chiffres pourrait dépasser une colonne `integer` : un tel identifiant n'existe pas.
 const isId = (id) => /^\d{1,9}$/.test(id);
@@ -26,7 +27,7 @@ export function certificatesRoutes({ db, clock, config }) {
   });
 
   // Lots des attestations ISSUED du commerce dont la période chevauche la nouvelle (les REPLACED sont ignorées).
-  async function readOverlappingLots({ storeId, periodStart, periodEnd }) {
+  async function readOverlappingBatches({ storeId, periodStart, periodEnd }) {
     const { rows } = await db.query(
       `SELECT donation_certificate.number, batch.nature, ${parisLocal('batch.collected_at')} AS collected_at
        FROM donation_certificate
@@ -63,13 +64,13 @@ export function certificatesRoutes({ db, clock, config }) {
 
     const period = { storeId: store.id, periodStart: values.period_start, periodEnd: values.period_end };
     if ((await selectCollectedBatches(db, period)).length === 0) {
-      errors.period_start = 'Aucun lot collecté pour ce commerce dans cette période.';
+      errors.period_start = NO_BATCH;
       return sendErrors();
     }
     // Avertissement non bloquant : la Coordination confirme avec le bouton « Produire quand même ».
     if (!req.body.confirm) {
-      const lots = await readOverlappingLots(period);
-      if (lots.length > 0) return res.send(overlapWarningPage({ session: req.session, values, lots }));
+      const batches = await readOverlappingBatches(period);
+      if (batches.length > 0) return res.send(overlapWarningPage({ session: req.session, values, batches }));
     }
 
     const issued = await db.withTransaction((client) => issueCertificate(client, {
@@ -77,7 +78,7 @@ export function certificatesRoutes({ db, clock, config }) {
     }));
     // Les lots ont pu changer de statut entre le contrôle et l'émission.
     if (!issued) {
-      errors.period_start = 'Aucun lot collecté pour ce commerce dans cette période.';
+      errors.period_start = NO_BATCH;
       return sendErrors();
     }
     return res.redirect(303, `/certificates/${issued.id}`);
@@ -98,7 +99,7 @@ export function certificatesRoutes({ db, clock, config }) {
       [req.params.id],
     );
     if (!certificate) return res.status(404).send(errorPage(NOT_FOUND));
-    const { rows: lots } = await db.query(
+    const { rows: batches } = await db.query(
       `SELECT batch.nature, batch.quantity, batch.quantity_unit, ${parisLocal('batch.collected_at')} AS collected_at,
               round(certificate_batch.weight_kg, 1)::text AS weight_kg,
               round(certificate_batch.value_eur, 2)::text AS value_eur
@@ -107,7 +108,7 @@ export function certificatesRoutes({ db, clock, config }) {
        ORDER BY batch.collected_at, batch.id`,
       [req.params.id],
     );
-    return res.send(certificatePage({ certificate, lots, issuer: config.issuer }));
+    return res.send(certificatePage({ certificate, batches, issuer: config.issuer }));
   });
 
   return router;

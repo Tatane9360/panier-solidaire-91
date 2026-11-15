@@ -51,9 +51,9 @@ export function certificateFormPage({ session, stores, values, errors }) {
 }
 
 // Avertissement non bloquant : la période chevauche des attestations émises.
-export function overlapWarningPage({ session, values, lots }) {
-  const items = lots
-    .map((lot) => `<li>${escapeHtml(lot.nature)}, collecté le ${escapeHtml(formatLocal(lot.collected_at))} (attestation ${escapeHtml(lot.number)})</li>`)
+export function overlapWarningPage({ session, values, batches }) {
+  const items = batches
+    .map((batch) => `<li>${escapeHtml(batch.nature)}, collecté le ${escapeHtml(formatLocal(batch.collected_at))} (attestation ${escapeHtml(batch.number)})</li>`)
     .join('');
   const hidden = ['store_id', 'period_start', 'period_end']
     .map((name) => `<input type="hidden" name="${name}" value="${escapeHtml(values[name])}">`)
@@ -78,15 +78,15 @@ const kg = (value) => `${escapeHtml(formatDecimal(value))} kg`;
 const euro = (value) => `${escapeHtml(formatDecimal(value))} €`;
 
 // Page imprimable : poids et valeur arrondis à l'affichage seulement (kg à 1 décimale, € à 2).
-export function certificatePage({ certificate, lots, issuer }) {
-  const rows = lots
-    .map((lot) => `
+export function certificatePage({ certificate, batches, issuer }) {
+  const rows = batches
+    .map((batch) => `
         <tr class="border-t border-slate-400">
-          <td class="p-2">${escapeHtml(lot.nature)}</td>
-          <td class="p-2">${escapeHtml(lot.quantity)} ${escapeHtml(lot.quantity_unit)}</td>
-          <td class="p-2">${escapeHtml(formatLocal(lot.collected_at))}</td>
-          <td class="p-2 text-right">${kg(lot.weight_kg)}</td>
-          <td class="p-2 text-right">${euro(lot.value_eur)}</td>
+          <td class="p-2">${escapeHtml(batch.nature)}</td>
+          <td class="p-2">${escapeHtml(batch.quantity)} ${escapeHtml(batch.quantity_unit)}</td>
+          <td class="p-2">${escapeHtml(formatLocal(batch.collected_at))}</td>
+          <td class="p-2 text-right">${kg(batch.weight_kg)}</td>
+          <td class="p-2 text-right">${euro(batch.value_eur)}</td>
         </tr>`)
     .join('');
   const issuerLines = [issuer.address, issuer.registration].filter(Boolean).map((line) => `<br>${escapeHtml(line)}`).join('');

@@ -210,3 +210,18 @@ test('only the coordination can issue or read a certificate', async () => {
   }
   assert.equal((await certificates()).length, 1);
 });
+
+test('period bounds follow Paris summer time (UTC+2): July 1st 00:00 is included, August 1st 00:00 is not', async () => {
+  const store = await env.createAccount({ role: 'STORE' });
+  await insertBatch(store.id, { nature: 'Début juillet', collectedAt: '2026-06-30T22:00:00Z' });
+  await insertBatch(store.id, { nature: 'Fin juillet', collectedAt: '2026-07-31T21:59:00Z' });
+  await insertBatch(store.id, { nature: 'Fin juin', collectedAt: '2026-06-30T21:59:00Z' });
+  await insertBatch(store.id, { nature: 'Début août', collectedAt: '2026-07-31T22:00:00Z' });
+  const { client } = await coordinatorClient();
+
+  const { location } = await issue(client, store, { period_start: '2026-07-01', period_end: '2026-07-31' });
+  const { body } = await client.get(location);
+  assert.match(body, /Début juillet/);
+  assert.match(body, /Fin juillet/);
+  assert.doesNotMatch(body, /Fin juin|Début août/);
+});

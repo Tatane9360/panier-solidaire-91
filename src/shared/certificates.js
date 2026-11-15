@@ -31,13 +31,14 @@ export async function issueCertificate(client, { storeId, periodStart, periodEnd
   if (batches.length === 0) return null;
 
   // Numéro PS91-AAAA-NNNN : année d'émission en heure de Paris, séquence remise à 1 chaque année.
-  const { rows: [{ number }] } = await client.query(
-    `SELECT 'PS91-' || year || '-' || lpad((coalesce(max(substr(number, 11)::int), 0) + 1)::text, 4, '0') AS number
-     FROM (SELECT to_char($1::timestamptz AT TIME ZONE 'Europe/Paris', 'YYYY') AS year) AS issue
-     LEFT JOIN donation_certificate ON donation_certificate.number LIKE 'PS91-' || issue.year || '-%'
-     GROUP BY year`,
-    [now],
+  // Sous le verrou, le nombre d'attestations déjà émises cette année donne le numéro suivant.
+  const { rows: [{ year }] } = await client.query(
+    "SELECT to_char($1::timestamptz AT TIME ZONE 'Europe/Paris', 'YYYY') AS year", [now],
   );
+  const { rows: [{ issued }] } = await client.query(
+    'SELECT count(*)::int AS issued FROM donation_certificate WHERE number LIKE $1', [`PS91-${year}-%`],
+  );
+  const number = `PS91-${year}-${String(issued + 1).padStart(4, '0')}`;
   // Les totaux sont sommés par PostgreSQL (numeric exact), pas en JavaScript (virgule flottante).
   const { rows: [totals] } = await client.query(
     `SELECT sum(batch.weight_kg) AS weight_kg, sum(batch.value_eur) AS value_eur FROM batch WHERE ${PERIOD_WHERE}`,
