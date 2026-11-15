@@ -14,6 +14,8 @@ Plateforme de gestion des dons alimentaires du **Panier Solidaire 91** (associat
 8. **Git** : PR uniquement vers `main`, Conventional Commits, branche `<numéro du ticket>-<feature>` (`7-reserve-batch`). **Après l'étiquette `remise` : plus aucun commit, réécriture ou déplacement d'étiquette.** → [workflow](docs/claude/workflow.md)
 9. **Code explicable ligne à ligne** : simple plutôt qu'astucieux (revue de code à l'oral).
 10. **Ne pas inventer de règle** : si la documentation est muette, demander à l'utilisateur, puis consigner la décision dans [business-rules.md](docs/claude/business-rules.md), ou dans un ADR (`docs/adr/`) si elle est difficile à défaire.
+11. **Un ticket = `/implement`**, jamais de code direct ; revue par `/code-review` (sous-agents opus, effort faible) ; statut du ticket mis à jour sur GitHub. → [workflow](docs/claude/workflow.md#traiter-un-ticket)
+12. **Documentation modulaire** : `CLAUDE.md` reste un index court (une ligne par règle + lien) ; tout détail va dans le module `docs/claude/` concerné, jamais dans `CLAUDE.md`. Toute consigne de l'utilisateur à retenir s'écrit ainsi, pour qu'il n'ait pas à la répéter.
 
 ## Commandes
 

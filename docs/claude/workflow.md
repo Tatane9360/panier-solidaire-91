@@ -16,6 +16,13 @@
 5. GitHub Actions bloque la fusion si un test échoue.
 6. En solo, la relecture est différée et tracée dans la PR.
 
+## Traiter un ticket
+
+1. Lancer **`/implement`** sur le ticket (il pilote `/tdd`, puis `/code-review`). Ne pas coder directement.
+2. Démarrer PostgreSQL (Docker Desktop, puis `docker compose up -d`) : un ticket n'est pas « terminé » tant que `pnpm test` n'a pas tourné.
+3. Lancer **`/code-review`** avec des sous-agents **opus** à effort **faible** (`low`) ; corriger ou trancher chaque constat.
+4. Mettre à jour le statut du ticket sur GitHub (`gh issue comment` : avancement, branche, résultat des tests ; fermeture à la fusion de la PR).
+
 Ordre des dépendances : l'expiration avant la confirmation de collecte en retard ; les attestations avant « annule et remplace ».
 
 ## Bogues

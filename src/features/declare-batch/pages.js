@@ -1,13 +1,6 @@
-import { page, escapeHtml, csrfField, COLD_LABELS, formatLocal, formatDecimal } from '../../shared/html.js';
+import { page, escapeHtml, csrfField, COLD_LABELS, STATUS_LABELS, formatLocal, formatDecimal } from '../../shared/html.js';
 
 const DATE_TYPE_LABELS = { DLC: 'DLC (date limite de consommation)', DDM: 'DDM (date de durabilité minimale)' };
-const STATUS_LABELS = {
-  DECLARED: 'Déclaré',
-  RESERVED: 'Réservé',
-  COLLECTED: 'Collecté',
-  CANCELLED: 'Annulé',
-  EXPIRED: 'Expiré',
-};
 
 // Ordre et libellés des champs du formulaire, repris dans le résumé des erreurs.
 const LABELS = {
