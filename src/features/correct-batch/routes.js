@@ -2,8 +2,10 @@ import { Router } from 'express';
 import { requireRole } from '../../shared/access.js';
 import { readForm, toDecimal, validate } from '../../shared/batch-form.js';
 import { writeHistory } from '../../shared/batch-history.js';
+import { ReplacementNeeded, replaceStaleCertificates } from '../../shared/certificates.js';
 import { errorPage } from '../../shared/html.js';
 import { releaseReservation } from '../../shared/reservations.js';
+import { replacementPage } from '../../shared/replacement-page.js';
 import { editBatchPage } from './pages.js';
 
 const NOT_FOUND = 'Lot introuvable.';
@@ -27,7 +29,7 @@ const parisInstant = (column) => `${parisLocal(column)} || to_char(${column} AT 
 
 // Lot avec ses champs au format du formulaire (créneau en heure de Paris).
 const SELECT_BATCH = `
-  SELECT id, nature, quantity::text, quantity_unit, weight_kg::text, value_eur::text,
+  SELECT id, store_id, nature, quantity::text, quantity_unit, weight_kg::text, value_eur::text,
          to_char(expiry_date, 'YYYY-MM-DD') AS expiry_date, date_type,
          ${parisLocal('pickup_start')} AS pickup_start, ${parisLocal('pickup_end')} AS pickup_end,
          ${parisInstant('pickup_start')} AS pickup_start_instant, ${parisInstant('pickup_end')} AS pickup_end_instant,
@@ -155,8 +157,17 @@ export function correctBatchRoutes({ db, clock }) {
           changedAt: clock.now(),
           batchId: batch.id, accountId, field: 'status', oldValue: batch.status, newValue: 'CANCELLED', reason,
         });
+        // Annuler un lot collecté change l'attestation qui le liste : annule et remplace.
+        await replaceStaleCertificates(client, {
+          storeId: batch.store_id, confirmed: Boolean(req.body.confirm), issuedBy: accountId, now: clock.now(),
+        });
       });
     } catch (error) {
+      if (error instanceof ReplacementNeeded) {
+        return res.send(replacementPage({
+          session: req.session, action: req.originalUrl, fields: { reason }, certificates: error.certificates,
+        }));
+      }
       if (!(error instanceof Refused)) throw error;
       return res.status(error.status).send(errorPage(error.message));
     }

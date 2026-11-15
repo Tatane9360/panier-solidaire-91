@@ -2,8 +2,10 @@ import { Router } from 'express';
 import { requireRole } from '../../shared/access.js';
 import { writeHistory } from '../../shared/batch-history.js';
 import { isDateTime } from '../../shared/batch-form.js';
+import { ReplacementNeeded, replaceStaleCertificates } from '../../shared/certificates.js';
 import { errorPage, formatLocal } from '../../shared/html.js';
 import { PICKUP_CONFIRMATION_WINDOW_HOURS } from '../../shared/pickup-window.js';
+import { replacementPage } from '../../shared/replacement-page.js';
 import { latePickupPage } from './pages.js';
 
 const NOT_FOUND = 'Lot introuvable.';
@@ -103,9 +105,18 @@ export function latePickupRoutes({ db, notifications, clock }) {
         const history = { batchId: batch.id, accountId, changedAt: now, reason: values.reason };
         await writeHistory(client, { ...history, field: 'status', oldValue: 'EXPIRED', newValue: 'COLLECTED' });
         await writeHistory(client, { ...history, field: 'collected_at', oldValue: null, newValue: values.collected_at + utc_offset });
+        // Un lot de plus collecté dans la période d'une attestation émise : annule et remplace.
+        await replaceStaleCertificates(client, {
+          storeId: batch.store_id, confirmed: Boolean(req.body.confirm), issuedBy: accountId, now,
+        });
         return { batch };
       });
     } catch (error) {
+      if (error instanceof ReplacementNeeded) {
+        return res.send(replacementPage({
+          session: req.session, action: req.originalUrl, fields: values, certificates: error.certificates,
+        }));
+      }
       if (!(error instanceof Refused)) throw error;
       return res.status(error.status).send(errorPage(error.message));
     }
