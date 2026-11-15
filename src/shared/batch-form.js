@@ -63,7 +63,7 @@ function isPositiveDecimal(value) {
 }
 
 // "2026-11-05" : on écarte aussi les dates inexistantes (31 février…).
-function isDate(value) {
+export function isDate(value) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const date = new Date(`${value}T00:00:00Z`);
   return !Number.isNaN(date.getTime()) && date.toISOString().startsWith(value);

@@ -8,6 +8,7 @@ import { reserveBatchRoutes } from './features/reserve-batch/routes.js';
 import { monitoringRoutes } from './features/monitoring/routes.js';
 import { correctBatchRoutes } from './features/correct-batch/routes.js';
 import { latePickupRoutes } from './features/late-pickup/routes.js';
+import { certificatesRoutes } from './features/certificates/routes.js';
 
 const publicDir = fileURLToPath(new URL('../public/', import.meta.url));
 
@@ -25,5 +26,6 @@ export function buildApp({ db, notifications, clock, config }) {
   app.use(monitoringRoutes({ db, config }));
   app.use(correctBatchRoutes({ db, clock }));
   app.use(latePickupRoutes({ db, notifications, clock }));
+  app.use(certificatesRoutes({ db, clock, config }));
   return app;
 }

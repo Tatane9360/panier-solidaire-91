@@ -47,7 +47,7 @@
 
 **`donation_certificate`** (attestation) : `id`, `number`* unique (format `PS91-AAAA-NNNN`, séquence annuelle), `store_id`*, `issued_by`*, `period_start`*, `period_end`*, `total_weight_kg`*, `total_value_eur`*, `issued_at`*, `status`* ∈ `ISSUED`, `REPLACED` ; `replaced_by` FK nullable (auto-référence).
 
-**`certificate_batch`** : PK (`certificate_id`, `batch_id`), `weight_kg`*, `value_eur`* **figés à l'émission**.
+**`certificate_batch`** : PK (`certificate_id`, `batch_id`), `nature`*, `quantity`*, `quantity_unit`*, `weight_kg`*, `value_eur`* **figés à l'émission** : la page d'une attestation ne relit jamais le lot (sauf `collected_at`, qui ne se corrige pas).
 
 ## Points d'attention
 
